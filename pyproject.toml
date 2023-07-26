@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages=["betfairdatabase"]
+
+[project]
+name = "betfairdatabase"
+version = "0.0.0"
+authors = [
+  { name="Mario Zaja", email="mzaja0@gmail.com" },
+]
+description = "Turns a collection of historical Betfair data into a queryable SQL database."
+readme = "README.md"
+license = { text = "MIT License" }
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+keywords = ["betfair", "trading", "betting", "database"]
+
+[project.urls]
+"Homepage" = "https://github.com/mzaja/betfair-database"
+"Bug Tracker" = "https://github.com/mzaja/betfair-database/issues"

@@ -1,3 +1,12 @@
+# IDE
+.vscode/
+
+# Auto-generated files
+.betfairdatabase*
+
+# Throwaway files
+scratchpad*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

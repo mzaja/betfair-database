@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .core import locate_index, construct_index, select_data
+from .core import locate_index, construct_index, select_data, SQL_TABLE_COLUMNS
 from .exceptions import IndexExistsError, IndexMissingError
 
 
@@ -30,7 +30,7 @@ def select(
     Selects data from the index.
     
     Parameters:
-        - database_dir: Parent directory of the Betfair database
+        - database_dir: Main directory of the database initialised with 'index'.
         - columns: Names of columns to return. If not specified, returns all columns.
         - where: SQL "WHERE" query for selecting data from the database.
         - limit: Maximum number of entries to return. Returns all entries if not specified.
@@ -43,3 +43,8 @@ def select(
     if not locate_index(database_dir):
         raise IndexMissingError(database_dir)
     return select_data(**locals())
+
+
+def columns() -> list:
+    """Returns a list of queryable database columns."""
+    return list(SQL_TABLE_COLUMNS)

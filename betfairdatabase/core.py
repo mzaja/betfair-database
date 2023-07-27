@@ -2,10 +2,9 @@ import json
 import sqlite3
 from pathlib import Path
 
-INDEX_FILENAME = ".betfairdatabase"
-DATA_FILE_SUFFIXES = ("", ".zip")
+INDEX_FILENAME = ".betfairdatabaseindex"
+DATA_FILE_SUFFIXES = ("", ".zip", ".gz", ".bz2")
 SQL_TABLE_NAME = "BetfairDatabaseIndex"
-SQL_TABLE_ID = "id"
 SQL_TABLE_COLUMNS = (
     "marketId",
     "marketName",

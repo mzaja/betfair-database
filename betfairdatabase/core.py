@@ -31,7 +31,7 @@ SQL_TABLE_COLUMNS = (
     "eventTimezone",
     "eventVenue",
     "eventOpenDate",
-    # Keeps these two fields always at the end of the list
+    # Keep these two fields at the end of the list
     "marketCatalogueFilePath",
     "marketDataFilePath",
 )

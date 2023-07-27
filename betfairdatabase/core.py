@@ -1,3 +1,4 @@
+import contextlib
 import json
 import sqlite3
 from pathlib import Path
@@ -124,14 +125,16 @@ def construct_index(database_dir: str | Path) -> int:
     located in database_dir.
     """
     data_files_indexed = 0
-    with sqlite3.connect(construct_index_path(database_dir)) as con:
-        con.execute(f"CREATE TABLE {SQL_TABLE_NAME}({','.join(SQL_TABLE_COLUMNS)})")
+    with contextlib.closing(
+        sqlite3.connect(construct_index_path(database_dir))
+    ) as conn, conn:
+        conn.execute(f"CREATE TABLE {SQL_TABLE_NAME}({','.join(SQL_TABLE_COLUMNS)})")
         for market_catalogue_file in locate_market_catalogues(database_dir):
             for suffix in DATA_FILE_SUFFIXES:
                 data_file = market_catalogue_file.with_suffix(suffix)
                 if data_file.exists():
                     sql_data_map = create_sql_mapping(market_catalogue_file, data_file)
-                    con.execute(
+                    conn.execute(
                         f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",
                         tuple(sql_data_map.values()),
                     )
@@ -152,7 +155,7 @@ def select_data(
 ) -> list[dict | tuple]:
     """
     Selects data from the index.
-    
+
     Parameters:
         - database_dir: Parent directory of the Betfair database
         - columns: Names of columns to return. If not specified, returns all columns.
@@ -160,19 +163,21 @@ def select_data(
         - limit: Maximum number of entries to return. Returns all entries if not specified.
         - return_dict: If True, returns each entry as {column name: value} mapping. If False,
                         returns just the values (faster, but harder to work with).
-                        
+
     Returns:
         A list of dicts if return_dict=True, else a list of tuples.
     """
     query_columns = "*" if columns is None else ",".join(columns)
     query_where = "" if where is None else f"WHERE {where}"
     query_limit = "" if limit is None else f"LIMIT {limit}"
-    
-    with sqlite3.connect(construct_index_path(database_dir)) as con:
-        values = con.execute(
+
+    with contextlib.closing(
+        sqlite3.connect(construct_index_path(database_dir))
+    ) as conn, conn:
+        values = conn.execute(
             f"SELECT {query_columns} FROM {SQL_TABLE_NAME} {query_where} {query_limit}"
         ).fetchall()
-        
+
     if return_dict:
         return [dict(zip(columns or SQL_TABLE_COLUMNS, v)) for v in values]
     else:

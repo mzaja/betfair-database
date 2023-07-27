@@ -28,7 +28,7 @@ def select(
 ) -> list[dict | tuple]:
     """
     Selects data from the index.
-    
+
     Parameters:
         - database_dir: Main directory of the database initialised with 'index'.
         - columns: Names of columns to return. If not specified, returns all columns.
@@ -36,7 +36,7 @@ def select(
         - limit: Maximum number of entries to return. Returns all entries if not specified.
         - return_dict: If True, returns each entry as {column name: value} mapping. If False,
                         returns just the values (faster, but harder to work with).
-                        
+
     Returns:
         A list of dicts if return_dict=True, else a list of tuples.
     """

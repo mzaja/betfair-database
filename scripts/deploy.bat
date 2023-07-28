@@ -7,5 +7,6 @@
 
 @REM Manually execute the command below to upload to PyPI
 @REM python -m twine upload dist/*
-@@REM Do not forget to tag the release
+@REM Do not forget to tag the release
 @REM git tag v0.1.0
+@REM git push origin --tags

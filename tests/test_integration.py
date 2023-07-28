@@ -20,6 +20,11 @@ class IntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         cls.test_data_dir = Path(tempfile.mkdtemp())
         shutil.copytree(cls.TEST_DATA_DIR, cls.test_data_dir, dirs_exist_ok=True)
+        cls.all_source_files = {p.resolve() for p in cls.test_data_dir.rglob("1.*")}
+        cls.catalogue_source_files = {
+            p for p in cls.all_source_files if p.suffix == ".json"
+        }
+        cls.data_source_files = cls.all_source_files - cls.catalogue_source_files
 
     @classmethod
     def tearDownClass(cls):
@@ -61,12 +66,20 @@ class IntegrationTest(unittest.TestCase):
 
         # There are 9 market catalogues, but one is missing its market data
         # so it shouldn't get imported
+        self.assertEqual(len(self.catalogue_source_files), 9)
         self.assertEqual(len(markets), 8)
         self.assertNotIn("1.199967351", [m["marketId"] for m in markets])
 
         # Test that column names wholly match the specification
         for market in markets:
             self.assertEqual(list(market.keys()), bfdb.columns())
+
+        # Check that paths to files are absolute and correct.
+        for market in markets:
+            self.assertIn(
+                Path(market["marketCatalogueFilePath"]), self.catalogue_source_files
+            )
+            self.assertIn(Path(market["marketDataFilePath"]), self.data_source_files)
 
         # Check counts of values
         self.check_value_counts(
@@ -119,3 +132,118 @@ class IntegrationTest(unittest.TestCase):
         self.check_value_counts(
             markets, "eventCountryCode", {"GB": 5, "FR": 1, None: 2}
         )
+
+    def test_select_columns_query(self):
+        """Tests "columns" parameter of "select" method."""
+        bfdb.index(self.test_data_dir)
+
+        # Columns not specified - all returned in the right order
+        markets = bfdb.select(self.test_data_dir)
+        for market in markets:
+            self.assertListEqual(list(market.keys()), bfdb.columns())
+
+        # Columns specified and in non-standard order
+        columns = ["marketCatalogueFilePath", "marketType", "marketId", "marketName"]
+        markets = bfdb.select(self.test_data_dir, columns=columns)
+        for market in markets:
+            self.assertListEqual(list(market.keys()), columns)
+
+    def test_select_where_query(self):
+        """Tests "where" parameter of "select" method."""
+        bfdb.index(self.test_data_dir)
+
+        # AND operator
+        markets = bfdb.select(
+            self.test_data_dir, where="eventTypeName='Soccer' AND eventTimezone='GMT'"
+        )
+        self.assertEqual(len(markets), 2)
+        for market in markets:
+            self.assertEqual(market["eventTypeName"], "Soccer")
+            self.assertEqual(market["eventTimezone"], "GMT")
+
+        # OR and IN operators
+        for query in [
+            "eventCountryCode='GB' OR eventCountryCode='FR'",
+            "eventCountryCode IN ('GB', 'FR')",
+        ]:
+            with self.subTest(query=query):
+                markets = bfdb.select(
+                    self.test_data_dir,
+                    where=query,
+                )
+                self.assertEqual(len(markets), 6)
+                for market in markets:
+                    self.assertIn(market["eventCountryCode"], ("GB", "FR"))
+
+        # BETWEEN operator
+        markets = bfdb.select(self.test_data_dir, where="runners BETWEEN 6 AND 8")
+        self.assertEqual(len(markets), 4)
+        for market in markets:
+            self.assertTrue(6 <= market["runners"] <= 8)
+
+        # NOT operator
+        markets = bfdb.select(self.test_data_dir, where="NOT eventTypeId='4339'")
+        self.assertEqual(len(markets), 6)
+        for market in markets:
+            self.assertNotEqual(market["eventTypeId"], "4339")
+
+        # NULL values
+        markets = bfdb.select(self.test_data_dir, where="eventCountryCode IS NULL")
+        self.assertEqual(len(markets), 2)
+        for market in markets:
+            self.assertIsNone(market["eventCountryCode"])
+
+        markets = bfdb.select(self.test_data_dir, where="eventCountryCode IS NOT NULL")
+        self.assertEqual(len(markets), 6)
+        for market in markets:
+            self.assertIsNotNone(market["eventCountryCode"])
+
+    def test_select_limit_query(self):
+        """Tests "limit" parameter of "select" method."""
+        bfdb.index(self.test_data_dir)
+
+        # No limit means return all
+        markets = bfdb.select(self.test_data_dir)
+        self.assertEqual(len(markets), 8)
+
+        # Limit specified
+        markets = bfdb.select(self.test_data_dir, limit=4)
+        self.assertEqual(len(markets), 4)
+
+    def test_select_return_options(self):
+        """Tests return options of "select" method."""
+        bfdb.index(self.test_data_dir)
+
+        markets = bfdb.select(self.test_data_dir, return_dict=True)
+        for market in markets:
+            self.assertIsInstance(market, dict)
+
+        markets = bfdb.select(self.test_data_dir, return_dict=False)
+        for market in markets:
+            self.assertIsInstance(market, tuple)
+
+    def test_select_combined_queries(self):
+        """Tests the combination of queries for selecting data."""
+        bfdb.index(self.test_data_dir)
+
+        for limit, market_count in zip([None, 2], [3, 2]):
+            with self.subTest(limit=limit):
+                columns = ["marketDataFilePath", "raceType", "runners"]
+                markets = bfdb.select(
+                    self.test_data_dir,
+                    columns=columns,
+                    where="eventTypeId IN ('7', '4339') AND eventCountryCode='GB'",
+                    limit=limit,
+                )
+                self.assertEqual(len(markets), market_count)
+                self.assertTrue(all(list(m.keys()) == columns for m in markets))
+
+        markets = bfdb.select(
+            self.test_data_dir,
+            columns=["eventTypeId", "bspMarket"],
+            where="eventTypeId IN ('7', '4339') AND bspMarket=true",
+        )
+        self.assertEqual(len(markets), 3)
+        for market in markets:
+            self.assertIn(market["eventTypeId"], ("7", "4339"))
+            self.assertTrue(market["bspMarket"])

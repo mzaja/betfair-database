@@ -78,7 +78,7 @@ bfdb.select(
 ```
 
 ### Exporting data
-Database index can be exported to a CSV file with the `export` function. This is useful for debugging, visualising data and post-processing it with external tools.
+Database index can be exported to a CSV file with the `export()` method. This is useful for debugging, visualising data and post-processing it with external tools.
 
 ```py
 import betfairdatabase as bfdb

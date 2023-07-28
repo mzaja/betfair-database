@@ -199,6 +199,36 @@ class IntegrationTest(unittest.TestCase):
         for market in markets:
             self.assertIsNotNone(market["eventCountryCode"])
 
+        # Date and time
+        # SQLite does not have a dedicated datetime type, so dates and times are
+        # represented as strings, in ISO-8601 format (also used by Betfair)
+        # Find all markets from the year 2022
+        markets = bfdb.select(
+            self.test_data_dir,
+            where="marketStartTime BETWEEN '2022-01-01' AND '2022-12-31'",
+        )
+        self.assertEqual(len(markets), 3)
+        for market in markets:
+            self.assertEqual(market["marketStartTime"][:4], "2022")
+
+        # Find all markets starting before noon (UTC)
+        markets = bfdb.select(
+            self.test_data_dir,
+            where="time(marketStartTime) < '12:00:00'",
+        )
+        self.assertEqual(len(markets), 4)
+        for market in markets:
+            self.assertLess(market["marketStartTime"].split("T")[1][:-1], "12:00:00")
+
+        # Find all markets starting in April
+        markets = bfdb.select(
+            self.test_data_dir,
+            where="strftime('%m', marketStartTime) == '04'",
+        )
+        self.assertEqual(len(markets), 2)
+        for market in markets:
+            self.assertEqual(market["marketStartTime"].split("-")[1], "04")
+
     def test_select_limit_query(self):
         """Tests "limit" parameter of "select" method."""
         bfdb.index(self.test_data_dir)

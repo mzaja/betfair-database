@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from .core import locate_index, construct_index, select_data, SQL_TABLE_COLUMNS
+from .core import (
+    SQL_TABLE_COLUMNS,
+    construct_index,
+    export_data_to_csv,
+    locate_index,
+    select_data,
+)
 from .exceptions import IndexExistsError, IndexMissingError
 
 
@@ -48,3 +54,18 @@ def select(
 def columns() -> list:
     """Returns a list of queryable database columns."""
     return list(SQL_TABLE_COLUMNS)
+
+
+def export(database_dir: str | Path, dest_dir: str | Path = ".") -> Path:
+    """
+    Exports the database to a CSV file and returns the path to it.
+
+    WARNING!
+    This can be very slow and resource-intensive for large databases.
+    No optimisations, such as chunkifying read data, are performed.
+    """
+    database_dir = Path(database_dir)
+    ouput_file = Path(dest_dir) / (database_dir.name + ".csv")
+    data = select(database_dir)
+    export_data_to_csv(data, ouput_file)
+    return Path(ouput_file)

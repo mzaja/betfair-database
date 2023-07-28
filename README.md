@@ -53,6 +53,7 @@ my_betfair_data/
 - `return_dict`: If `True` (default), results are returned as a dictionary where keys are column names and values are data. If `False`, results are returned as tuples containing only data. The second option is faster but makes data harder to work with.
 
 Below are several examples of selecting and filtering data:
+
 ```py
 import betfairdatabase as bfdb
 
@@ -74,4 +75,14 @@ bfdb.select(
     where="eventTypeId IN ('7', '4339') AND marketType='WIN'",
     limit=250,
 )
+```
+
+### Exporting data
+Database index can be exported to a CSV file with the `export` function. This is useful for debugging, visualising data and post-processing it with external tools.
+
+```py
+import betfairdatabase as bfdb
+
+csv_file = bfdb.export("./my_betfair_data", "./my_data_dump")
+print(csv_file)  # Prints: ./my_data_dump/my_betfair_data.csv
 ```

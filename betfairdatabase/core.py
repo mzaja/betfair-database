@@ -1,4 +1,5 @@
 import contextlib
+import csv
 import json
 import sqlite3
 from pathlib import Path
@@ -182,3 +183,12 @@ def select_data(
         return [dict(zip(columns or SQL_TABLE_COLUMNS, v)) for v in values]
     else:
         return values
+
+
+def export_data_to_csv(data: list[dict], output_file: str | Path):
+    """Exports the data given as a list of mappings to a CSV file."""
+    if data:
+        with open(output_file, "w", newline="") as f:
+            writer = csv.DictWriter(f, data[0].keys())
+            writer.writeheader()
+            writer.writerows(data)

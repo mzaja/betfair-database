@@ -3,7 +3,9 @@
 @REM API access token must be present in %USERPROFILE%\.pypirc
 
 @REM Upload to Test PyPI to verify everything is ok
-python -m twine upload --repository testpypi dist/*
+@REM python -m twine upload --repository testpypi dist/*
 
 @REM Manually execute the command below to upload to PyPI
 @REM python -m twine upload dist/*
+@@REM Do not forget to tag the release
+@REM git tag v0.1.0

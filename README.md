@@ -1,4 +1,6 @@
 # betfair-database
+[![test](https://github.com/mzaja/betfair-database/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/mzaja/betfair-database/actions/workflows/test.yml) [![Coverage Status](https://coveralls.io/repos/github/mzaja/betfair-database/badge.svg?branch=main)](https://coveralls.io/github/mzaja/betfair-database?branch=main) ![PyPI version](https://img.shields.io/pypi/v/betfairdatabase) ![Python version](https://img.shields.io/pypi/pyversions/betfairdatabase) ![License](https://img.shields.io/github/license/mzaja/betfair-database)
+
 Turns a collection of historical Betfair data into a queryable SQL database. 
 
 ## Installation

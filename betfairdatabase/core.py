@@ -63,7 +63,7 @@ def locate_market_catalogues(database_dir: str | Path) -> list[Path]:
 
 def parse_market_catalogue(market_catalogue_file: str | Path) -> dict:
     """Parses the market catalogue and"""
-    with open(market_catalogue_file) as f:
+    with open(market_catalogue_file, encoding="utf-8") as f:
         return json.load(f)
 
 

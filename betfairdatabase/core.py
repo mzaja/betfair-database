@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 from typing import Callable
+from functools import cache, cached_property
 
 INDEX_FILENAME = ".betfairdatabaseindex"
 DATA_FILE_SUFFIXES = ("", ".zip", ".gz", ".bz2")
@@ -64,8 +65,85 @@ def locate_market_catalogues(database_dir: str | Path) -> list[Path]:
     return Path(database_dir).rglob("1.*.json")
 
 
+class Market:
+    """
+    Holds the information about market catalogue and market data files.
+    """
+
+    def __init__(self, market_catalogue_file: str | Path):
+        self.market_catalogue_file = Path(market_catalogue_file).resolve()
+
+    @cached_property
+    def market_data_file(self) -> Path | None:
+        """Returns the path to the market data file for this market."""
+        return self._locate_market_data_file()
+
+    @cached_property
+    def market_catalogue_data(self) -> dict:
+        """Parsed market catalogue data."""
+        with open(self.market_catalogue_file, encoding="utf-8") as f:
+            return json.load(f)
+
+    @cache
+    def create_sql_mapping(self) -> dict[str, object]:
+        """
+        Returns a dictionary where keys are SQL table column names and
+        values are values in a row.
+        """
+        sql_data_map = self._transform_market_catalogue()
+        sql_data_map["marketCatalogueFilePath"] = str(self.market_catalogue_file)
+        sql_data_map["marketDataFilePath"] = str(self.market_data_file)
+        return sql_data_map
+
+    def _locate_market_data_file(self) -> Path | None:
+        """
+        Locates the market data file, which is expected to be next to the
+        market catalogue file and share the same basename.
+        """
+        for suffix in DATA_FILE_SUFFIXES:
+            data_file = self.market_catalogue_file.with_suffix(suffix)
+            if data_file.exists():
+                return data_file.resolve()
+        return None  # Market data file was not found
+
+    @staticmethod
+    def _flatten_subdict(parent_dict: dict[str, object], child_key: str) -> None:
+        """
+        Flattens a dictionary by combining parent and child's key names.
+        Modifies the dictionary in place.
+        """
+        if subdict := parent_dict.pop(child_key, None):
+            for subkey, value in subdict.items():
+                # Preserve camel case in the combined key
+                combined_key = child_key + subkey[0].upper() + subkey[1:]
+                parent_dict[combined_key] = value
+
+    def _transform_market_catalogue(self) -> dict:
+        """
+        Transforms parsed market catalogue data into a flat dict
+        representation suitable for SQL table import.
+        """
+        # Break out unnecessary parts and those that need further processing
+        data = self.market_catalogue_data.copy()
+
+        if description := data.pop("description", None):
+            self._flatten_subdict(description, "priceLadderDescription")
+            self._flatten_subdict(description, "lineRangeInfo")
+            data.update(description)
+
+        if runners := data.pop("runners", None):
+            data["runners"] = len(runners)  # Only note down the number of selections
+
+        self._flatten_subdict(data, "eventType")
+        self._flatten_subdict(data, "competition")
+        self._flatten_subdict(data, "event")
+
+        # All keys not in SQL_TABLE_COLUMNS are dropped
+        return {k: data.get(k, None) for k in SQL_TABLE_COLUMNS}
+
+
 def parse_market_catalogue(market_catalogue_file: str | Path) -> dict:
-    """Parses the market catalogue and"""
+    """Parses the market catalogue and returns the result as a dictionary."""
     with open(market_catalogue_file, encoding="utf-8") as f:
         return json.load(f)
 
@@ -275,6 +353,8 @@ def insert(
     """
     If copy is True, copies the files instead of moving them.
     """
+    if not locate_index(database_dir):
+        construct_index(database_dir)
     with contextlib.closing(
         sqlite3.connect(construct_index_path(database_dir))
     ) as conn, conn:
@@ -294,9 +374,9 @@ def insert(
                     continue
                 else:
                     # Copy or move the files to the destination
-                    operation = shutil.copy if copy else shutil.move
-                    operation(market_catalogue_file, market_catalogue_dest_file)
-                    operation(data_file, market_data_dest_file)
+                    file_operation = shutil.copy if copy else shutil.move
+                    file_operation(market_catalogue_file, market_catalogue_dest_file)
+                    file_operation(data_file, market_data_dest_file)
                     parse_data_and_insert_row(
                         conn, market_catalogue_dest_file, market_data_dest_file
                     )

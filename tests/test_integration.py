@@ -10,17 +10,17 @@ from betfairdatabase.const import INDEX_FILENAME
 from betfairdatabase.exceptions import IndexExistsError, IndexMissingError
 
 
-class TestIntegration(unittest.TestCase):
+class TestIntegrationBase(unittest.TestCase):
     """
-    Integration test for the module.
+    Base integration test scenario.
     """
 
-    TEST_DATA_DIR = Path("./tests/data")
+    TEST_DATA_DIR_SRC = Path("./tests/data")
 
     @classmethod
     def setUpClass(cls):
         cls.test_data_dir = Path(tempfile.mkdtemp())
-        shutil.copytree(cls.TEST_DATA_DIR, cls.test_data_dir, dirs_exist_ok=True)
+        shutil.copytree(cls.TEST_DATA_DIR_SRC, cls.test_data_dir, dirs_exist_ok=True)
         cls.all_source_files = {p.resolve() for p in cls.test_data_dir.rglob("1.*")}
         cls.catalogue_source_files = {
             p for p in cls.all_source_files if p.suffix == ".json"
@@ -44,6 +44,12 @@ class TestIntegration(unittest.TestCase):
         actual_counts = Counter(m[column] for m in markets)
         expected_counts = Counter(expected_counts)
         self.assertEqual(actual_counts, expected_counts)  # Order does not matter
+
+
+class TestIntegration(TestIntegrationBase):
+    """
+    Integration test for the module.
+    """
 
     def test_index_already_exists(self):
         """Index already exists."""
@@ -304,8 +310,68 @@ class TestIntegration(unittest.TestCase):
                 else:
                     market[key] = str(value)
 
-        # Compare output 9CSV file) and source (database) data
+        # Compare output (CSV file) and source (database) data
         with open(csv_file, "r") as f:
             reader = csv.DictReader(f)
             for m1, m2 in zip(reader, markets):
                 self.assertEqual(m1, m2)
+
+
+class TestIntegrationInsert(TestIntegrationBase):
+    """
+    Tests the insert() module-level method using the move method.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        pass  # Do nothing because setup code runs once per test
+
+    @classmethod
+    def tearDownClass(cls):
+        pass  # Do nothing because teardown code runs once per test
+
+    def setUp(self):
+        super().setUpClass()  # Setup fixture once per test
+        self.dataset_1 = self.test_data_dir / "uncompressed"
+        self.dataset_2 = self.test_data_dir / "zip-lzma"
+        self.database_dir = self.test_data_dir / "test_db"
+        self.database_dir.mkdir()
+
+    def tearDown(self):
+        super().tearDownClass()  # Teardown fixture once per test
+
+    def base_test(self, copy: bool, leftover_files: list[list[str]]):
+        """Base test for testing copy/move style insert method."""
+        test_cases = [
+            (self.dataset_1, 5, leftover_files[0]),
+            (self.dataset_2, 8, leftover_files[1]),
+        ]
+        for dataset, market_count, leftover_src_files in test_cases:
+            with self.subTest():
+                bfdb.insert(self.database_dir, dataset, copy=copy)
+                markets = bfdb.select(self.database_dir)
+                self.assertEqual(len(markets), market_count)
+                for market in markets:
+                    for file_type in ("marketCatalogueFilePath", "marketDataFilePath"):
+                        self.assertTrue(Path(market[file_type]).exists())
+                self.assertEqual(
+                    [f.name for f in dataset.iterdir()], leftover_src_files
+                )
+
+    def test_move(self):
+        """Tests updating the database by moving the files into it."""
+        self.base_test(False, [["1.199967351.json"], []])
+
+    def test_copy(self):
+        """Tests updating the database by copying the files into it."""
+        self.base_test(
+            True,
+            [
+                [f.name for f in self.dataset_1.iterdir()],
+                [f.name for f in self.dataset_2.iterdir()],
+            ],
+        )
+
+        # Test raising an exception if the destination file already exists
+        with self.assertRaises(FileExistsError):
+            bfdb.insert(self.database_dir, self.dataset_1)

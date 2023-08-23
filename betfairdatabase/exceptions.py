@@ -27,5 +27,6 @@ class MarketDataFileError(BetfairDatabaseError):
     Raised when a market data file cannot be found or an
     error is encountered when processing it.
     """
+
     def __init__(self, msg: str):
         super().__init__(msg)

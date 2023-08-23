@@ -1,5 +1,8 @@
 from pathlib import Path
+from typing import Callable
+
 from betfairdatabase.database import BetfairDatabase
+from betfairdatabase.utils import ImportPatterns
 
 
 def index(database_dir: str | Path, overwrite: bool = False) -> int:
@@ -48,3 +51,22 @@ def export(database_dir: str | Path, dest_dir: str | Path = ".") -> Path:
     No optimisations, such as chunkifying read data, are performed.
     """
     return BetfairDatabase(database_dir).export(dest_dir)
+
+
+def insert(
+    database_dir: str | Path,
+    source_dir: str | Path,
+    copy: bool = False,
+    pattern: Callable[[dict], str] = ImportPatterns.betfair_historical,
+) -> int:
+    """
+    Inserts market catalogue/data files from source_dir into the database.
+
+    Returns the number of inserted table rows (market catalogue/data file pairs).
+
+    Files must not exist at the destination, otherwise FileExistsError is raised.
+    If copy is True, copies the files instead of moving them.
+    A custom import pattern can be provided to instruct the database how to
+    interally organise the files into directories.
+    """
+    return BetfairDatabase(database_dir).insert(source_dir, copy, pattern)

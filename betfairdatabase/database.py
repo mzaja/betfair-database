@@ -22,7 +22,7 @@ class BetfairDatabase:
 
     def __init__(self, database_dir: str | Path):
         self.database_dir = Path(database_dir)
-        self._index_file = self._construct_index_file_path()
+        self._index_file = self.database_dir / INDEX_FILENAME
 
     def index(self, overwrite: bool = False) -> int:
         """
@@ -60,20 +60,35 @@ class BetfairDatabase:
         source_dir: str | Path,
         copy: bool = False,
         pattern: Callable[[dict], str] = ImportPatterns.betfair_historical,
-    ):
+    ) -> int:
         """
+        Inserts market catalogue/data files from source_dir into the database.
+
+        Returns the number of inserted table rows (market catalogue/data file pairs).
+
+        Files must not exist at the destination, otherwise FileExistsError is raised.
         If copy is True, copies the files instead of moving them.
+        A custom import pattern can be provided to instruct the database how to
+        interally organise the files into directories.
         """
-        # if not self._index_file.exists():
-        #     construct_index(database_dir)
-        # with contextlib.closing(
-        #     sqlite3.connect(construct_index_path(database_dir))
-        # ) as conn, conn:
-        #     for market_catalogue_file in locate_market_catalogues(source_dir):
-        #         market = Market(market_catalogue_file)
-        #         dest_dir = Path(database_dir) / pattern(market.market_catalogue_data)
-        #         new_market = market.copy(dest_dir) if copy else market.move(dest_dir)
-        #         insert_row(conn, new_market)
+        if not self._index_file.exists():
+            self.index()  # Make a database if it does not exist
+        rows_inserted = 0
+        with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
+            for market_catalogue_file in self._locate_market_catalogues(source_dir):
+                try:
+                    market = Market(market_catalogue_file)
+                    dest_dir = self.database_dir / pattern(market.market_catalogue_data)
+                    new_market = (
+                        market.copy(dest_dir) if copy else market.move(dest_dir)
+                    )
+                    self._insert_row(conn, new_market)
+                    rows_inserted += 1
+                except MarketDataFileError:
+                    # Log warning that a data file is missing
+                    pass
+                # FileExistsErrors are not handled
+        return rows_inserted
 
     def select(
         self,
@@ -140,10 +155,6 @@ class BetfairDatabase:
 
     ################# PRIVATE METHODS #######################
 
-    def _construct_index_file_path(self) -> Path:
-        """Returns the expected path of the database index."""
-        return self.database_dir / INDEX_FILENAME
-
     @staticmethod
     def _locate_market_catalogues(target_dir: str | Path) -> list[Path]:
         """
@@ -158,12 +169,6 @@ class BetfairDatabase:
         Parses the market catalogue file, transforms the data into an SQL table row and
         imports the said row into an SQL table using the provided connection object.
         """
-        if market.market_data_file is None:
-            # The whole point of this package is to quickly access market data files,
-            # so fail if they are missing.
-            raise MarketDataFileError(
-                f"Market data file is missing for market catalogue '{market.market_catalogue_file}'."
-            )
         sql_data_map = market.create_sql_mapping()
         connection.execute(
             f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",

@@ -6,6 +6,7 @@ from functools import cache
 import copy as cp
 
 from betfairdatabase.const import DATA_FILE_SUFFIXES, SQL_TABLE_COLUMNS
+from betfairdatabase.exceptions import MarketDataFileError
 
 
 class Market:
@@ -19,13 +20,25 @@ class Market:
         self.market_catalogue_file = Path(market_catalogue_file).resolve()
 
     @property
-    def market_data_file(self) -> Path | None:
-        """Returns the path to the market data file for this market."""
+    def market_data_file(self) -> Path:
+        """
+        Returns the path to the market data file for this market. Raises
+        MarketDataFileError if the file does not exist.
+
+        Market data file is expected to be next to the market catalogue file
+        and share the same basename.
+        """
         try:
             return self._market_data_file
         except AttributeError:
-            self._market_data_file = self._locate_market_data_file()
-            return self._market_data_file
+            for suffix in DATA_FILE_SUFFIXES:
+                data_file = self.market_catalogue_file.with_suffix(suffix)
+                if data_file.exists():
+                    self._market_data_file = data_file.resolve()
+                    return self._market_data_file
+            raise MarketDataFileError(
+                f"Market data file is missing for market catalogue '{self.market_catalogue_file}'."
+            )
 
     @property
     def market_catalogue_data(self) -> dict:
@@ -55,6 +68,7 @@ class Market:
         directory, returning a new Market wrapper around them.
 
         Caches are preserved with this operation.
+        If the destination file already exists, raises FileExistsError.
         """
         overwrite = False
         return self._change_location(dest_dir, True, overwrite)
@@ -65,23 +79,12 @@ class Market:
         directory, modifying this object in place and returning a reference to it.
 
         Caches are preserved with this operation.
+        If the destination file already exists, raises FileExistsError.
         """
         overwrite = False
         return self._change_location(dest_dir, False, overwrite)
 
     ################# PRIVATE METHODS #######################
-
-    def _locate_market_data_file(self) -> Path | None:
-        """
-        Locates the market data file, which is expected to be next to the
-        market catalogue file and share the same basename. Returns the
-        absolute path to the file, or None if the file cannot be located.
-        """
-        for suffix in DATA_FILE_SUFFIXES:
-            data_file = self.market_catalogue_file.with_suffix(suffix)
-            if data_file.exists():
-                return data_file.resolve()
-        return None  # Market data file was not found
 
     @staticmethod
     def _flatten_subdict(parent_dict: dict[str, Any], child_key: str) -> None:
@@ -150,6 +153,7 @@ class Market:
             else:
                 file_operation = shutil.move
                 market = self  # Modify itself in-place
+            market_catalogue_dest_file.mkdir(exist_ok=True, parents=True)
             file_operation(self.market_catalogue_file, market_catalogue_dest_file)
             file_operation(self.market_data_file, market_data_dest_file)
             market.market_catalogue_file = market_catalogue_dest_file

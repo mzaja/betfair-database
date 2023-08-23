@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from betfairdatabase.core import parse_market_catalogue
+from betfairdatabase.market import Market
 
 
 class CoreUnitTest(unittest.TestCase):
@@ -14,5 +14,6 @@ class CoreUnitTest(unittest.TestCase):
     def test_market_catalogues_decoded_as_utf_8(self, mock_open, mock_json_load):
         """Market catalogues files are decoded as UTF-8."""
         filename = "1.22334455.json"
-        parse_market_catalogue(filename)
-        mock_open.assert_called_with(filename, encoding="utf-8")
+        market = Market(filename)
+        market.market_catalogue_data  # Trigger parsing
+        mock_open.assert_called_with(mock.ANY, encoding="utf-8")

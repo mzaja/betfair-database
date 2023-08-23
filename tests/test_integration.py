@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import Path
 
 import betfairdatabase as bfdb
-from betfairdatabase.core import INDEX_FILENAME
+from betfairdatabase.const import INDEX_FILENAME
 from betfairdatabase.exceptions import IndexExistsError, IndexMissingError
 
 

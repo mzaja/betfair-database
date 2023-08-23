@@ -1,13 +1,5 @@
 from pathlib import Path
-
-from betfairdatabase.core import (
-    construct_index,
-    export_data_to_csv,
-    locate_index,
-    select_data,
-)
-from betfairdatabase.const import SQL_TABLE_COLUMNS
-from betfairdatabase.exceptions import IndexExistsError, IndexMissingError
+from betfairdatabase.database import BetfairDatabase
 
 
 def index(database_dir: str | Path, overwrite: bool = False) -> int:
@@ -15,14 +7,7 @@ def index(database_dir: str | Path, overwrite: bool = False) -> int:
     Turns the target directory into a database by indexing its contents.
     Returns the number of indexed market data files.
     """
-    if index_file := locate_index(database_dir):
-        if overwrite:
-            index_file.unlink()
-        else:
-            raise IndexExistsError(
-                database_dir, " Use overwrite=True option to reindex the database."
-            )
-    return construct_index(database_dir)
+    return BetfairDatabase(database_dir).index(overwrite)
 
 
 def select(
@@ -46,14 +31,12 @@ def select(
     Returns:
         A list of dicts if return_dict=True, else a list of tuples.
     """
-    if not locate_index(database_dir):
-        raise IndexMissingError(database_dir)
-    return select_data(**locals())
+    return BetfairDatabase(database_dir).select(columns, where, limit, return_dict)
 
 
 def columns() -> list:
     """Returns a list of queryable database columns."""
-    return list(SQL_TABLE_COLUMNS)
+    return BetfairDatabase.columns()
 
 
 def export(database_dir: str | Path, dest_dir: str | Path = ".") -> Path:
@@ -64,8 +47,4 @@ def export(database_dir: str | Path, dest_dir: str | Path = ".") -> Path:
     This can be very slow and resource-intensive for large databases.
     No optimisations, such as chunkifying read data, are performed.
     """
-    database_dir = Path(database_dir)
-    ouput_file = Path(dest_dir) / (database_dir.name + ".csv")
-    data = select(database_dir)
-    export_data_to_csv(data, ouput_file)
-    return Path(ouput_file)
+    return BetfairDatabase(database_dir).export(dest_dir)

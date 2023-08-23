@@ -1,13 +1,13 @@
 from pathlib import Path
 
-from .core import (
-    SQL_TABLE_COLUMNS,
+from betfairdatabase.core import (
     construct_index,
     export_data_to_csv,
     locate_index,
     select_data,
 )
-from .exceptions import IndexExistsError, IndexMissingError
+from betfairdatabase.const import SQL_TABLE_COLUMNS
+from betfairdatabase.exceptions import IndexExistsError, IndexMissingError
 
 
 def index(database_dir: str | Path, overwrite: bool = False) -> int:

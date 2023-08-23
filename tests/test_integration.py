@@ -10,7 +10,7 @@ from betfairdatabase.const import INDEX_FILENAME
 from betfairdatabase.exceptions import IndexExistsError, IndexMissingError
 
 
-class IntegrationTest(unittest.TestCase):
+class TestIntegration(unittest.TestCase):
     """
     Integration test for the module.
     """

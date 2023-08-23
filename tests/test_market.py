@@ -4,7 +4,7 @@ from unittest import mock
 from betfairdatabase.market import Market
 
 
-class CoreUnitTest(unittest.TestCase):
+class TestMarket(unittest.TestCase):
     """
     Unit-tests the core functionality of the package.
     """

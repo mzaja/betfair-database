@@ -124,14 +124,18 @@ class Market:
         # Calculate local times if possible
         try:
             time_zone = ZoneInfo(self.market_catalogue_data["event"]["timezone"])
-            market_start_time_local = parse_datetime(self.market_catalogue_data["marketStartTime"]).astimezone(time_zone)
-            event_open_date_local = parse_datetime(self.market_catalogue_data["event"]["openDate"]).astimezone(time_zone)
+            market_start_time_local = parse_datetime(
+                self.market_catalogue_data["marketStartTime"]
+            ).astimezone(time_zone)
+            event_open_date_local = parse_datetime(
+                self.market_catalogue_data["event"]["openDate"]
+            ).astimezone(time_zone)
             data["localDayOfWeek"] = market_start_time_local.strftime("%A")
             data["localMarketStartTime"] = str(market_start_time_local)
             data["localEventOpenDate"] = str(event_open_date_local)
         except KeyError:
             pass  # "event", and therefore "timezone", are not provided
-        
+
         # All keys not in SQL_TABLE_COLUMNS are dropped
         return {k: data.get(k, None) for k in SQL_TABLE_COLUMNS}
 

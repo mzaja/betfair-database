@@ -27,6 +27,9 @@ SQL_TABLE_COLUMNS = (
     "eventTimezone",
     "eventVenue",
     "eventOpenDate",
+    "localDayOfWeek",
+    "localMarketStartTime",
+    "localEventOpenDate",
     # Keep these two fields at the end of the list
     "marketCatalogueFilePath",
     "marketDataFilePath",

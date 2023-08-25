@@ -22,6 +22,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(dt.hour, 17)
         self.assertEqual(dt.minute, 9)
         self.assertEqual(dt.second, 37)
+        self.assertEqual(dt.tzname(), "UTC")
 
     def test_import_pattern_betfair_historical(self):
         """Tests the official Betfair's folder naming pattern."""

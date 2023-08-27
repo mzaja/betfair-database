@@ -30,6 +30,10 @@ SQL_TABLE_COLUMNS = (
     "localDayOfWeek",
     "localMarketStartTime",
     "localEventOpenDate",
+    "raceId",
+    "raceTypeFromName",
+    "raceDistanceMeters",
+    "raceDistanceFurlongs",
     # Keep these two fields at the end of the list
     "marketCatalogueFilePath",
     "marketDataFilePath",

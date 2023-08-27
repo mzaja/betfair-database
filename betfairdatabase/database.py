@@ -12,6 +12,7 @@ from betfairdatabase.exceptions import (
 )
 from betfairdatabase.market import Market
 from betfairdatabase.utils import ImportPatterns
+from betfairdatabase.racing import RacingDataProcessor
 
 
 class BetfairDatabase:
@@ -23,6 +24,7 @@ class BetfairDatabase:
     def __init__(self, database_dir: str | Path):
         self.database_dir = Path(database_dir)
         self._index_file = self.database_dir / INDEX_FILENAME
+        self._racing_data_processor = RacingDataProcessor()
 
     def index(self, overwrite: bool = False) -> int:
         """
@@ -39,21 +41,11 @@ class BetfairDatabase:
                     " Use overwrite=True option to reindex the database.",
                 )
         # Construct index
-        data_files_indexed = 0
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
             conn.execute(
                 f"CREATE TABLE {SQL_TABLE_NAME}({','.join(SQL_TABLE_COLUMNS)})"
             )
-            for market_catalogue_file in self._locate_market_catalogues(
-                self.database_dir
-            ):
-                try:
-                    self._insert_row(conn, Market(market_catalogue_file))
-                    data_files_indexed += 1
-                except MarketDataFileError:
-                    # Log warning that a data file is missing
-                    pass
-        return data_files_indexed
+            return self._handle_market_catalogues(self.database_dir, conn)
 
     def insert(
         self,
@@ -73,22 +65,10 @@ class BetfairDatabase:
         """
         if not self._index_file.exists():
             self.index()  # Make a database if it does not exist
-        rows_inserted = 0
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
-            for market_catalogue_file in self._locate_market_catalogues(source_dir):
-                try:
-                    market = Market(market_catalogue_file)
-                    dest_dir = self.database_dir / pattern(market.market_catalogue_data)
-                    new_market = (
-                        market.copy(dest_dir) if copy else market.move(dest_dir)
-                    )
-                    self._insert_row(conn, new_market)
-                    rows_inserted += 1
-                except MarketDataFileError:
-                    # Log warning that a data file is missing
-                    pass
-                # FileExistsErrors are not handled
-        return rows_inserted
+            return self._handle_market_catalogues(
+                source_dir, conn, copy=copy, pattern=pattern
+            )
 
     def select(
         self,
@@ -163,14 +143,40 @@ class BetfairDatabase:
         """
         return Path(target_dir).rglob("1.*.json")
 
-    @staticmethod
-    def _insert_row(connection: sqlite3.Connection, market: Market):
+    def _handle_market_catalogues(
+        self, source_dir: str | Path, connection: sqlite3.Connection, **kwargs
+    ) -> int:
         """
-        Parses the market catalogue file, transforms the data into an SQL table row and
-        imports the said row into an SQL table using the provided connection object.
+        Processes market catalogues, converts the data to a tabular format and
+        inserts it as rows into a SQL table.
+
+        Returns the number of SQL table rows inserted. Optionally performs additional data processing
+        for racing markets.
         """
-        sql_data_map = market.create_sql_mapping()
-        connection.execute(
-            f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",
-            tuple(sql_data_map.values()),
-        )
+        # racing = True
+        copy = kwargs.get("copy", False)
+        pattern = kwargs.get("pattern", None)
+        rows_inserted = 0
+        markets = list(Market(mc) for mc in self._locate_market_catalogues(source_dir))
+        # Two-pass required, so cache generated Market objects in RAM
+        for market in markets:
+            self._racing_data_processor.add(market)  # Rejects non-racing markets
+        for market in markets:
+            try:
+                if pattern is not None:
+                    dest_dir = self.database_dir / pattern(market.market_catalogue_data)
+                    market = market.copy(dest_dir) if copy else market.move(dest_dir)
+                sql_data_map = market.create_sql_mapping(
+                    # Rejects non-racing markets
+                    self._racing_data_processor.get(market)
+                )
+                connection.execute(
+                    f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",
+                    tuple(sql_data_map.values()),
+                )
+                rows_inserted += 1
+            except MarketDataFileError:
+                # Log warning that a data file is missing
+                pass
+            # FileExistsErrors are not handled
+        return rows_inserted

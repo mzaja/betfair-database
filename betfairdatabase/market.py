@@ -1,7 +1,7 @@
 import copy as cp
 import json
 import shutil
-from functools import cache
+from functools import cache, cached_property
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -9,6 +9,11 @@ from zoneinfo import ZoneInfo
 from betfairdatabase.const import DATA_FILE_SUFFIXES, SQL_TABLE_COLUMNS
 from betfairdatabase.exceptions import MarketDataFileError
 from betfairdatabase.utils import parse_datetime
+
+RACING_EVENT_TYPE_IDS = (
+    "7",  # Horse racing
+    "4339",  # Greyhound racing
+)
 
 
 class Market:
@@ -42,27 +47,45 @@ class Market:
                 f"Market data file is missing for market catalogue '{self.market_catalogue_file}'."
             )
 
-    @property
+    @cached_property
     def market_catalogue_data(self) -> dict:
         """Parsed market catalogue data."""
-        try:
-            return self._market_catalogue_data
-        except AttributeError:
-            with open(self.market_catalogue_file, encoding="utf-8") as f:
-                self._market_catalogue_data = json.load(f)
-            return self._market_catalogue_data
+        with open(self.market_catalogue_file, encoding="utf-8") as f:
+            return json.load(f)
 
-    def create_sql_mapping(self) -> dict[str, Any]:
+    @cached_property
+    def racing(self) -> bool:
+        """
+        Returns True if the market is a racing one, False if it isn't or it
+        cannot be determined.
+        """
+        try:
+            return (
+                self.market_catalogue_data["eventType"]["id"] in RACING_EVENT_TYPE_IDS
+            )
+        except KeyError:
+            return False
+
+    def create_sql_mapping(
+        self, additional_metadata: dict | None = None
+    ) -> dict[str, Any]:
         """
         Returns a dictionary where keys are SQL table column names and
         values are values in a row.
         """
-        sql_data_map = self._transform_market_catalogue()
-        sql_data_map["marketCatalogueFilePath"] = self._str_or_none(
-            self.market_catalogue_file
-        )
-        sql_data_map["marketDataFilePath"] = self._str_or_none(self.market_data_file)
-        return sql_data_map
+        # Call below is cached, so it must be a separate method
+        data = self._transform_market_catalogue()
+
+        # Insert additional metadata if any is provided
+        if additional_metadata:
+            data.update(additional_metadata)
+
+        # Insert file location info
+        data["marketCatalogueFilePath"] = self._str_or_none(self.market_catalogue_file)
+        data["marketDataFilePath"] = self._str_or_none(self.market_data_file)
+
+        # All keys not in SQL_TABLE_COLUMNS are dropped
+        return {k: data.get(k, None) for k in SQL_TABLE_COLUMNS}
 
     def copy(self, dest_dir: str | Path) -> "Market":
         """
@@ -100,8 +123,13 @@ class Market:
                 combined_key = child_key + subkey[0].upper() + subkey[1:]
                 parent_dict[combined_key] = value
 
+    @staticmethod
+    def _str_or_none(obj) -> str | None:
+        """Returns None if the obj is None, else its string representation."""
+        return None if obj is None else str(obj)
+
     @cache
-    def _transform_market_catalogue(self) -> dict:
+    def _transform_market_catalogue(self):
         """
         Transforms parsed market catalogue data into a flat dict
         representation suitable for SQL table import.
@@ -136,13 +164,7 @@ class Market:
         except KeyError:
             pass  # "event", and therefore "timezone", are not provided
 
-        # All keys not in SQL_TABLE_COLUMNS are dropped
-        return {k: data.get(k, None) for k in SQL_TABLE_COLUMNS}
-
-    @staticmethod
-    def _str_or_none(obj) -> str | None:
-        """Returns None if the obj is None, else its string representation."""
-        return None if obj is None else str(obj)
+        return data
 
     def _change_location(
         self, dest_dir: str | Path, copy: bool, overwrite: bool

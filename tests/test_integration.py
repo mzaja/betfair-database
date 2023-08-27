@@ -140,6 +140,23 @@ class TestIntegration(TestIntegrationBase):
             markets, "eventCountryCode", {"GB": 5, "FR": 1, None: 2}
         )
 
+        # Value counts for additional metadata
+        self.check_value_counts(
+            markets,
+            "localDayOfWeek",
+            {"Friday": 4, "Tuesday": 2, "Thursday": 1, "Monday": 1},
+        )
+        self.check_value_counts(
+            markets, "raceTypeFromName", {"OR": 2, "Mdn Claim": 1, None: 5}
+        )
+        meters_counter = Counter(m["raceDistanceMeters"] for m in markets)
+        self.assertEqual(meters_counter[280], 2)
+        self.assertEqual(meters_counter[None], 5)
+        furlongs_counter = Counter(m["raceDistanceFurlongs"] for m in markets)
+        self.assertEqual(furlongs_counter[6], 1)
+        self.assertEqual(furlongs_counter[None], 5)
+        self.assertEqual(Counter(m["raceId"] for m in markets)[None], 5)
+
     def test_select_columns_query(self):
         """Tests "columns" parameter of "select" method."""
         bfdb.index(self.test_data_dir)

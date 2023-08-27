@@ -1,5 +1,13 @@
 # Release History
 
+## 0.2.0 (2023-08-27)
+### Improvements
+- New `insert` method for updating the database with new files.
+- Object-oriented interface through `BetfairDatabase` class.
+- New generic fields: `localDayOfWeek`, `localDayOfWeek`, `localMarketStartTime`.
+- New racing-specific fields: `raceId`, `raceTypeFromName`, `raceDistanceMeters`, `raceDistanceFurlongs`.
+- `export` method accepts both directories and files as a destination.
+
 ## 0.1.1 (2023-07-31)
 ### Bug fixes
 - Decode market catalogue files as UTF-8.

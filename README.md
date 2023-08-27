@@ -79,6 +79,15 @@ bfdb.select(
 )
 ```
 
+### Inserting data
+Database can be updated with new files using `insert` method. This is much faster and more efficient than reindexing the whole database on each update. Files are moved by default, but they can also be copied if `copy=True` argument is provided.
+
+```py
+import betfairdatabase as bfdb
+
+bfdb.insert("./my_betfair_data", "./my_capture_dir")  
+```
+
 ### Exporting data
 Database index can be exported to a CSV file with the `export()` method. This is useful for debugging, visualising data and post-processing it with external tools.
 
@@ -87,4 +96,16 @@ import betfairdatabase as bfdb
 
 csv_file = bfdb.export("./my_betfair_data", "./my_data_dump")
 print(csv_file)  # Prints: ./my_data_dump/my_betfair_data.csv
+```
+
+### Object-oriented interface
+All of the above methods can also be accessed through OOP interface via `BetfairDatabase` class. This is useful when performing multiple operations on the same database as the database directory needs to be provided only once.
+```py
+from betfairdatabase import BetfairDatabase
+
+db = BetfairDatabase("./my_betfair_data")
+db.index()
+db.select()
+db.insert("./my_capture_dir")
+db.export()
 ```

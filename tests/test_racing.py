@@ -105,3 +105,15 @@ class TestRacing(unittest.TestCase):
         self.assertAlmostEqual(metadata["raceDistanceFurlongs"], 1.391871, 3)
         self.assertEqual(metadata["raceTypeFromName"], "OR")
         self.assertIsNone(proc.get(non_racing_market))  # No exception raised
+
+    def test_racing_data_processor_incomplete_market_catalogue(self):
+        """
+        Incomplete or defective market catalogue must not raise an exception.
+        """
+        mock_market = mock.Mock()
+        mock_market.market_catalogue_data = {}
+        mock_market.racing = True
+        proc = RacingDataProcessor()
+        # Test passes if no exceptions are raised
+        proc.add(mock_market)
+        proc.get(mock_market)

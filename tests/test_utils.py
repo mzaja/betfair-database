@@ -24,6 +24,17 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(dt.second, 37)
         self.assertEqual(dt.tzname(), "UTC")
 
+    @mock.patch("betfairdatabase.utils.dt.datetime")
+    def test_parse_datetime_3_10(self, mock_datetime):
+        """
+        Simulates parsing datetime on Python 3.10.
+        This test is required to achieve 100 % test coverage.
+        It will be removed in the future when 3.10 stops being supported.
+        """
+        mock_datetime.fromisoformat.side_effect = (ValueError, mock.Mock())
+        parse_datetime(TIMESTAMP)
+        mock_datetime.fromisoformat.assert_called_with("2023-06-01T17:09:37.000")
+
     def test_import_pattern_betfair_historical(self):
         """Tests the official Betfair's folder naming pattern."""
         market_catalogue_data = {

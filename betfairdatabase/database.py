@@ -116,22 +116,27 @@ class BetfairDatabase:
         """Returns a list of queryable database columns."""
         return list(SQL_TABLE_COLUMNS)
 
-    def export(self, dest_dir: str | Path = ".") -> Path:
+    def export(self, dest: str | Path = ".") -> Path:
         """
         Exports the database to a CSV file and returns the path to it.
+
+        dest can be either a directory or a file name. If it is a directory,
+        the output file name becomes database name + ".csv"
 
         WARNING!
         This can be very slow and resource-intensive for large databases.
         No optimisations, such as chunkifying read data, are performed.
         """
-        output_file = Path(dest_dir) / (self.database_dir.name + ".csv")
+        dest = Path(dest)
+        if dest.is_dir():
+            dest /= self.database_dir.name + ".csv"
         data = self.select()
         if data:
-            with open(output_file, "w", newline="") as f:
+            with open(dest, "w", newline="") as f:
                 writer = csv.DictWriter(f, data[0].keys())
                 writer.writeheader()
                 writer.writerows(data)
-        return output_file
+        return dest
 
     ################# PRIVATE METHODS #######################
 

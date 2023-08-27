@@ -310,28 +310,33 @@ class TestIntegration(TestIntegrationBase):
         output_dir = self.test_data_dir / "output"
         output_dir.mkdir(exist_ok=True)
 
-        # Export the index to a CSV file in the same directory
-        csv_file = bfdb.export(self.test_data_dir, output_dir)
-        # File name is inherited from the database
-        self.assertEqual(csv_file.name, self.test_data_dir.name + ".csv")
-        # File is exported to the destination directory
-        self.assertEqual(csv_file.parent, output_dir)
+        for dest, output_filename in [
+            (output_dir, self.test_data_dir.name + ".csv"),
+            (output_dir / "abc.csv", "abc.csv"),
+        ]:
+            with self.subTest(dest=dest):
+                # Export the index to a CSV file in the same directory
+                csv_file = bfdb.export(self.test_data_dir, dest)
+                # File name is inherited from the database if not provided
+                self.assertEqual(csv_file.name, output_filename)
+                # File is exported to the destination directory
+                self.assertEqual(csv_file.parent, output_dir)
 
-        # Validate data integrity
-        markets = bfdb.select(self.test_data_dir)
-        # Convert everything to strings since the CSV file is read as such
-        for market in markets:
-            for key, value in market.items():
-                if value is None:
-                    market[key] = ""
-                else:
-                    market[key] = str(value)
+                # Validate data integrity
+                markets = bfdb.select(self.test_data_dir)
+                # Convert everything to strings since the CSV file is read as such
+                for market in markets:
+                    for key, value in market.items():
+                        if value is None:
+                            market[key] = ""
+                        else:
+                            market[key] = str(value)
 
-        # Compare output (CSV file) and source (database) data
-        with open(csv_file, "r") as f:
-            reader = csv.DictReader(f)
-            for m1, m2 in zip(reader, markets):
-                self.assertEqual(m1, m2)
+                # Compare output (CSV file) and source (database) data
+                with open(csv_file, "r") as f:
+                    reader = csv.DictReader(f)
+                    for m1, m2 in zip(reader, markets):
+                        self.assertEqual(m1, m2)
 
 
 class TestIntegrationInsert(TestIntegrationBase):

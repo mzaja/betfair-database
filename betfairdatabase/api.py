@@ -42,7 +42,7 @@ def columns() -> list:
     return BetfairDatabase.columns()
 
 
-def export(database_dir: str | Path, dest_dir: str | Path = ".") -> Path:
+def export(database_dir: str | Path, dest: str | Path = ".") -> Path:
     """
     Exports the database to a CSV file and returns the path to it.
 
@@ -50,7 +50,7 @@ def export(database_dir: str | Path, dest_dir: str | Path = ".") -> Path:
     This can be very slow and resource-intensive for large databases.
     No optimisations, such as chunkifying read data, are performed.
     """
-    return BetfairDatabase(database_dir).export(dest_dir)
+    return BetfairDatabase(database_dir).export(dest)
 
 
 def insert(

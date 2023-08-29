@@ -46,6 +46,9 @@ def export(database_dir: str | Path, dest: str | Path = ".") -> Path:
     """
     Exports the database to a CSV file and returns the path to it.
 
+    dest can be either a directory or a file name. If it is a directory,
+    the output file name becomes database name + ".csv"
+
     WARNING!
     This can be very slow and resource-intensive for large databases.
     No optimisations, such as chunkifying read data, are performed.

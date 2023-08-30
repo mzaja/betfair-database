@@ -9,7 +9,7 @@ MOCK_CTG_FILENAME = "1.22334455.json"
 
 class TestMarket(unittest.TestCase):
     """
-    Unit-tests the core functionality of the package.
+    Tests Market class.
     """
 
     @mock.patch("json.load")  # No need to parse anything

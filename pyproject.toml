@@ -26,3 +26,6 @@ keywords = ["betfair", "trading", "betting", "database"]
 [project.urls]
 "Homepage" = "https://github.com/mzaja/betfair-database"
 "Bug Tracker" = "https://github.com/mzaja/betfair-database/issues"
+
+[project.scripts]
+bfdb = "betfairdatabase.__main__:main"

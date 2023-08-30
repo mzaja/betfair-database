@@ -26,19 +26,22 @@ class BetfairDatabase:
         self._index_file = self.database_dir / INDEX_FILENAME
         self._racing_data_processor = RacingDataProcessor()
 
-    def index(self, overwrite: bool = False) -> int:
+    def index(self, force: bool = False) -> int:
         """
         Turns the target directory into a database by indexing its contents.
+
         Returns the number of indexed market data files.
+        Throws IndexExistsError if an index already exists. Use force=True to
+        overwrite the existing index.
         """
         # Check if index already exists and whether it should be overwritten
         if self._index_file.exists():
-            if overwrite:
+            if force:
                 self._index_file.unlink()
             else:
                 raise IndexExistsError(
                     self.database_dir,
-                    " Use overwrite=True option to reindex the database.",
+                    " Use force=True option to reindex the database.",
                 )
         # Construct index
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:

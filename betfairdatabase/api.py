@@ -5,12 +5,15 @@ from betfairdatabase.database import BetfairDatabase
 from betfairdatabase.utils import ImportPatterns
 
 
-def index(database_dir: str | Path, overwrite: bool = False) -> int:
+def index(database_dir: str | Path, force: bool = False) -> int:
     """
     Turns the target directory into a database by indexing its contents.
+
     Returns the number of indexed market data files.
+    Throws IndexExistsError if an index already exists. Use force=True to
+    overwrite the existing index.
     """
-    return BetfairDatabase(database_dir).index(overwrite)
+    return BetfairDatabase(database_dir).index(force)
 
 
 def select(

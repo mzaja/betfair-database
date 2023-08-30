@@ -57,7 +57,7 @@ class TestIntegration(TestIntegrationBase):
         with self.assertRaises(IndexExistsError):
             bfdb.index(self.test_data_dir)
         # If it does not throw an error here, it passes
-        bfdb.index(self.test_data_dir, overwrite=True)
+        bfdb.index(self.test_data_dir, force=True)
 
     def test_index_does_not_exist(self):
         """Trying to fetch data from the database without indexing first."""

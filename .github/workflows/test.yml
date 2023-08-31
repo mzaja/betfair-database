@@ -34,6 +34,7 @@ jobs:
     - name: Check formatting
       run: |
         black --check betfairdatabase tests
+        isort --check betfairdatabase tests
     - name: Run tests
       run: |
         coverage run --source=betfairdatabase -m unittest discover -s tests -b

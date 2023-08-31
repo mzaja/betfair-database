@@ -1,5 +1,6 @@
 # Requirements for development
 black
-isort>=5.0
 coverage
 coveralls
+isort>=5.0
+pre-commit

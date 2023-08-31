@@ -1,5 +1,6 @@
 # Requirements for development
 black
+blacken-docs
 coverage
 coveralls
 isort>=5.0

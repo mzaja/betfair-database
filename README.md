@@ -1,7 +1,7 @@
 # betfair-database
 [![test](https://github.com/mzaja/betfair-database/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/mzaja/betfair-database/actions/workflows/test.yml) [![Coverage Status](https://coveralls.io/repos/github/mzaja/betfair-database/badge.svg?branch=main)](https://coveralls.io/github/mzaja/betfair-database?branch=main) ![PyPI version](https://img.shields.io/pypi/v/betfairdatabase) ![Python version](https://img.shields.io/pypi/pyversions/betfairdatabase) ![License](https://img.shields.io/github/license/mzaja/betfair-database)
 
-Turns a collection of historical Betfair data into a queryable SQL database. 
+Turns a collection of historical Betfair data into a queryable SQL database.
 
 ## Installation
 Install the package from **PyPI**:
@@ -11,7 +11,7 @@ pip install betfairdatabase
 
 ## Usage
 ### Getting started
-1. Index the folder holding historical Betfair data to turn it into a database. 
+1. Index the folder holding historical Betfair data to turn it into a database.
 2. Use SQL queries to select data.
 
 ```py
@@ -85,7 +85,7 @@ Database can be updated with new files using `insert` method. This is much faste
 ```py
 import betfairdatabase as bfdb
 
-bfdb.insert("./my_betfair_data", "./my_capture_dir")  
+bfdb.insert("./my_betfair_data", "./my_capture_dir")
 ```
 
 ### Exporting data

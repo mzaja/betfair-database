@@ -109,3 +109,16 @@ db.select()
 db.insert("./my_capture_dir")
 db.export()
 ```
+
+### Command line interface
+The package also installs a `bfdb` command line app, which provides access to the following methods:
+```bash
+bfdb index "./my_database_dir"  # Index a database
+bfdb export "./my_database_dir" "./my_db_dump.csv" # Export a database
+bfdb insert "./my_database_dir" "./my_captured_data"  # Update the database
+```
+
+For more information about the command line interface, run:
+```bash
+bfdb --help
+```

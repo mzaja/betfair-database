@@ -1,13 +1,9 @@
-import argparse
+from argparse import ArgumentParser
 
 from betfairdatabase import api
 from betfairdatabase.utils import ImportPatterns
 
 IMPORT_PATTERNS = ("betfair_historical", "event_id", "flat")
-
-# Test that all import patterns are valid
-for pattern in IMPORT_PATTERNS:
-    getattr(ImportPatterns, pattern)
 
 
 def get_version() -> str:
@@ -20,13 +16,13 @@ def get_version() -> str:
         return ""
 
 
-def parse_args() -> tuple:
+def get_parser() -> ArgumentParser:
     """
-    Parses command line arguments.
+    Creates and returns a command line argument parser.
 
-    Returns a tuple (parsed_args, parser).
+    Call parser.parse_args() to parse arguments.
     """
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         prog="bfdb", description="betfairdatabase command line app."
     )
     parser.add_argument(
@@ -89,12 +85,13 @@ def parse_args() -> tuple:
         choices=IMPORT_PATTERNS,
         help="File import pattern.",
     )
-    return (parser.parse_args(), parser)
+    return parser
 
 
 def main():
     """Entry point for the command line app."""
-    args, parser = parse_args()
+    parser = get_parser()
+    args = parser.parse_args()
     match args.command:
         case "index":
             api.index(args.database_dir, args.force)

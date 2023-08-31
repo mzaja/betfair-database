@@ -6,13 +6,13 @@ from typing import Callable
 
 from betfairdatabase.const import INDEX_FILENAME, SQL_TABLE_COLUMNS, SQL_TABLE_NAME
 from betfairdatabase.exceptions import (
-    MarketDataFileError,
     IndexExistsError,
     IndexMissingError,
+    MarketDataFileError,
 )
 from betfairdatabase.market import Market
-from betfairdatabase.utils import ImportPatterns
 from betfairdatabase.racing import RacingDataProcessor
+from betfairdatabase.utils import ImportPatterns
 
 
 class BetfairDatabase:

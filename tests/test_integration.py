@@ -1,7 +1,7 @@
 import csv
-import unittest
 import shutil
 import tempfile
+import unittest
 from collections import Counter
 from pathlib import Path
 

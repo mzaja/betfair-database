@@ -5,6 +5,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages=["betfairdatabase"]
 
+[tool.isort]
+profile = "black"
+
 [project]
 name = "betfairdatabase"
 version = "0.2.0"

@@ -1,8 +1,7 @@
 import unittest
 from unittest import mock
 
-from betfairdatabase.utils import parse_datetime, ImportPatterns
-
+from betfairdatabase.utils import ImportPatterns, parse_datetime
 
 TIMESTAMP = "2023-06-01T17:09:37.000Z"
 EVENT_ID = "12345678"

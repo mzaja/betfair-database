@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from betfairdatabase.api import index, select, columns, export, insert, BetfairDatabase
+from betfairdatabase.api import BetfairDatabase, columns, export, index, insert, select
 
 
 class TestAPI(unittest.TestCase):

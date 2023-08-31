@@ -1,2 +1,2 @@
-from betfairdatabase.api import index, select, columns, export, insert
+from betfairdatabase.api import columns, export, index, insert, select
 from betfairdatabase.database import BetfairDatabase

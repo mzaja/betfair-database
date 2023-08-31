@@ -3,7 +3,6 @@ from unittest import mock
 
 from betfairdatabase.market import Market
 
-
 MOCK_CTG_FILENAME = "1.22334455.json"
 
 

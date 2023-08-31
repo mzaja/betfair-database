@@ -1,13 +1,13 @@
 import unittest
-from unittest import mock
 from pathlib import Path
+from unittest import mock
 
+from betfairdatabase.market import Market
 from betfairdatabase.racing import (
-    extract_race_metadata,
     METERS_PER_FURLONG,
     RacingDataProcessor,
+    extract_race_metadata,
 )
-from betfairdatabase.market import Market
 
 TEST_DATA_DIR = Path("./tests/data")
 

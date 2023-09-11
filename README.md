@@ -98,6 +98,15 @@ csv_file = bfdb.export("./my_betfair_data", "./my_data_dump")
 print(csv_file)  # Prints: ./my_data_dump/my_betfair_data.csv
 ```
 
+### Removing missing data
+Throughout the course of database's lifetime, indexed files may get removed. `clean()` method checks for the presence of indexed market data files and removes the missing entries from the index, avoiding the need to reindex the whole database on every single file removal. However, reindexing the database may be the faster option when a large number of files has been removed.
+
+```py
+import betfairdatabase as bfdb
+
+bfdb.clean("./my_betfair_data")
+```
+
 ### Object-oriented interface
 All of the above methods can also be accessed through OOP interface via `BetfairDatabase` class. This is useful when performing multiple operations on the same database as the database directory needs to be provided only once.
 ```py
@@ -108,6 +117,7 @@ db.index()
 db.select()
 db.insert("./my_capture_dir")
 db.export()
+db.clean()
 ```
 
 ### Command line interface
@@ -116,6 +126,7 @@ The package also installs a `bfdb` command line app, which provides access to th
 bfdb index "./my_database_dir"  # Index a database
 bfdb export "./my_database_dir" "./my_db_dump.csv" # Export a database
 bfdb insert "./my_database_dir" "./my_captured_data"  # Update the database
+bfdb clean "./my_database_dir"  # Clean the database
 ```
 
 For more information about the command line interface, run:

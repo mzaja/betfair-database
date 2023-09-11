@@ -37,7 +37,10 @@ def get_parser() -> ArgumentParser:
     )
 
     # Sub-parser for index command
-    parser_index = subparsers.add_parser("index")
+    parser_index = subparsers.add_parser(
+        "index",
+        description="Turns the target directory into a database by indexing its contents.",
+    )
     parser_index.add_argument(
         "database_dir",
         help="Directory containing captured Betfair files to be turned into a database.",
@@ -63,7 +66,10 @@ def get_parser() -> ArgumentParser:
     )
 
     # Sub-parser for insert command
-    parser_insert = subparsers.add_parser("insert")
+    parser_insert = subparsers.add_parser(
+        "insert",
+        description="Inserts market catalogue/data files from source_dir into the database.",
+    )
     parser_insert.add_argument(
         "database_dir",
         help="Top-level directory of a Betfair database.",
@@ -85,6 +91,17 @@ def get_parser() -> ArgumentParser:
         choices=IMPORT_PATTERNS,
         help="File import pattern.",
     )
+
+    # Sub-parser for clean command
+    parser_clean = subparsers.add_parser(
+        "clean",
+        description="Removes entries with missing market data files from the database.",
+    )
+    parser_clean.add_argument(
+        "database_dir",
+        help="Top-level directory of an indexed Betfair database.",
+    )
+
     return parser
 
 
@@ -101,6 +118,8 @@ def main():
             # Parser should catch invalid options for "pattern"
             pattern = getattr(ImportPatterns, args.pattern)
             api.insert(args.database_dir, args.source_dir, args.copy, pattern)
+        case "clean":
+            api.clean(args.database_dir)
         case _:
             print("Unsupported sub-command.")
             parser.print_help()

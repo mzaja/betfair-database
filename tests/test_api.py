@@ -1,7 +1,15 @@
 import unittest
 from unittest import mock
 
-from betfairdatabase.api import BetfairDatabase, columns, export, index, insert, select
+from betfairdatabase.api import (
+    BetfairDatabase,
+    clean,
+    columns,
+    export,
+    index,
+    insert,
+    select,
+)
 
 
 class TestAPI(unittest.TestCase):
@@ -26,21 +34,26 @@ class TestAPI(unittest.TestCase):
         self.assert_docstrings_equal(columns.__doc__, db.columns.__doc__)
         self.assert_docstrings_equal(export.__doc__, db.export.__doc__)
         self.assert_docstrings_equal(insert.__doc__, db.insert.__doc__)
+        self.assert_docstrings_equal(clean.__doc__, db.clean.__doc__)
 
     def test_delegated_calls(self):
         """
         API calls must be delegated to the correct BetfairDatabase's method.
         """
-        database_dir = "some_random_dir"
+        DATABASE_DIR = "some_random_dir"
+        DEFAULT_CALL_ARGS = (DATABASE_DIR, None)
+        CALL_ARGS = {"clean": (DATABASE_DIR,)}  # List non-default call args only
         # Test instance methods
-        for api_func_name in ("index", "select", "export", "insert"):
+        for api_func_name in ("index", "select", "export", "insert", "clean"):
             with self.subTest(api_func=api_func_name), mock.patch(
                 "betfairdatabase.api.BetfairDatabase"
             ) as mock_db_class:
                 mock_db_instance = mock.Mock()
                 mock_db_class.return_value = mock_db_instance
-                globals()[api_func_name](database_dir, None)
-                mock_db_class.assert_called_with(database_dir)
+                globals()[api_func_name](
+                    *CALL_ARGS.get(api_func_name, DEFAULT_CALL_ARGS)
+                )
+                mock_db_class.assert_called_with(DATABASE_DIR)
                 getattr(mock_db_instance, api_func_name).assert_called()
 
         # Test class method

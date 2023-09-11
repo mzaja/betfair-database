@@ -76,3 +76,14 @@ def insert(
     interally organise the files into directories.
     """
     return BetfairDatabase(database_dir).insert(source_dir, copy, pattern)
+
+
+def clean(database_dir: str | Path):
+    """
+    Deletes all database entries with a missing market data file.
+
+    This method reduces the need to reindex the database whenever the files are
+    removed from it. However, reindexing can be faster if a large number of files
+    has been removed.
+    """
+    return BetfairDatabase(database_dir).clean()

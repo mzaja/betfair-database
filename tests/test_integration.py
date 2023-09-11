@@ -18,7 +18,12 @@ class TestIntegrationBase(unittest.TestCase):
     TEST_DATA_DIR_SRC = Path("./tests/data")
 
     @classmethod
-    def setUpClass(cls):
+    def setup_test_fixtures(cls):
+        """
+        1. Creates a temporary directory.
+        2. Copies test data to it.
+        3. Lists the copied files into categories.
+        """
         cls.test_data_dir = Path(tempfile.mkdtemp())
         shutil.copytree(cls.TEST_DATA_DIR_SRC, cls.test_data_dir, dirs_exist_ok=True)
         cls.all_source_files = {p.resolve() for p in cls.test_data_dir.rglob("1.*")}
@@ -28,8 +33,17 @@ class TestIntegrationBase(unittest.TestCase):
         cls.data_source_files = cls.all_source_files - cls.catalogue_source_files
 
     @classmethod
-    def tearDownClass(cls):
+    def teardown_test_fixtures(cls):
+        """Removes the temporary directory containing test data."""
         shutil.rmtree(cls.test_data_dir)
+
+    @classmethod
+    def setUpClass(cls):
+        cls.setup_test_fixtures()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.teardown_test_fixtures()
 
     def setUp(self):
         """Erases all database indexes between test cases."""
@@ -46,9 +60,11 @@ class TestIntegrationBase(unittest.TestCase):
         self.assertEqual(actual_counts, expected_counts)  # Order does not matter
 
 
-class TestIntegration(TestIntegrationBase):
+class TestIntegrationPart1(TestIntegrationBase):
     """
     Integration test for the module.
+
+    The tests in this class require copying the test data only once.
     """
 
     def test_index_already_exists(self):
@@ -339,9 +355,11 @@ class TestIntegration(TestIntegrationBase):
                         self.assertEqual(m1, m2)
 
 
-class TestIntegrationInsert(TestIntegrationBase):
+class TestIntegrationPart2(TestIntegrationBase):
     """
-    Tests the insert() module-level method using the move method.
+    Tests insert() and clean() methods.
+
+    The tests in this class require copying the test data once per test.
     """
 
     @classmethod
@@ -353,16 +371,16 @@ class TestIntegrationInsert(TestIntegrationBase):
         pass  # Do nothing because teardown code runs once per test
 
     def setUp(self):
-        super().setUpClass()  # Setup fixture once per test
+        self.setup_test_fixtures()
         self.dataset_1 = self.test_data_dir / "uncompressed"
         self.dataset_2 = self.test_data_dir / "zip-lzma"
         self.database_dir = self.test_data_dir / "test_db"
         self.database_dir.mkdir()
 
     def tearDown(self):
-        super().tearDownClass()  # Teardown fixture once per test
+        self.teardown_test_fixtures()
 
-    def base_test(self, copy: bool, leftover_files: list[list[str]]):
+    def base_test_move_insert(self, copy: bool, leftover_files: list[list[str]]):
         """Base test for testing copy/move style insert method."""
         test_cases = [
             (self.dataset_1, 5, leftover_files[0]),
@@ -382,11 +400,11 @@ class TestIntegrationInsert(TestIntegrationBase):
 
     def test_move(self):
         """Tests updating the database by moving the files into it."""
-        self.base_test(False, [["1.199967351.json"], []])
+        self.base_test_move_insert(False, [["1.199967351.json"], []])
 
     def test_copy(self):
         """Tests updating the database by copying the files into it."""
-        self.base_test(
+        self.base_test_move_insert(
             True,
             [
                 [f.name for f in self.dataset_1.iterdir()],
@@ -397,3 +415,37 @@ class TestIntegrationInsert(TestIntegrationBase):
         # Test raising an exception if the destination file already exists
         with self.assertRaises(FileExistsError):
             bfdb.insert(self.database_dir, self.dataset_1)
+
+    def test_clean(self):
+        """Tests removing rows with missing market data files from the database."""
+        database_dir = self.test_data_dir  # Use source data dir as a database
+
+        def select_market_data_file_paths() -> set:
+            nonlocal database_dir
+            return set(
+                m[0]
+                for m in bfdb.select(
+                    database_dir, columns=["marketDataFilePath"], return_dict=False
+                )
+            )
+
+        # Non-indexed database must raise an error
+        with self.assertRaises(IndexMissingError):
+            bfdb.clean(database_dir)
+
+        # Index database and read its state
+        bfdb.index(database_dir)
+        markets_before = select_market_data_file_paths()
+        self.assertEqual(len(markets_before), 8)
+
+        # Randomly select 3 data files and delete them
+        markets_to_remove = set(self.data_source_files.pop() for _ in range(3))
+        self.assertEqual(len(markets_to_remove), 3)
+        for data_file in markets_to_remove:
+            data_file.unlink()
+        markets_removed = set(str(p) for p in markets_to_remove)
+
+        # Clean the database and re-select data
+        bfdb.clean(database_dir)
+        markets_after = select_market_data_file_paths()
+        self.assertEqual(markets_after, markets_before - markets_removed)

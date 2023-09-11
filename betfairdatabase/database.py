@@ -1,10 +1,17 @@
 import contextlib
 import csv
+import os
 import sqlite3
 from pathlib import Path
 from typing import Callable
 
-from betfairdatabase.const import INDEX_FILENAME, SQL_TABLE_COLUMNS, SQL_TABLE_NAME
+from betfairdatabase.const import (
+    INDEX_FILENAME,
+    MARKET_DATA_FILE_PATH,
+    ROWID,
+    SQL_TABLE_COLUMNS,
+    SQL_TABLE_NAME,
+)
 from betfairdatabase.exceptions import (
     IndexExistsError,
     IndexMissingError,
@@ -140,6 +147,35 @@ class BetfairDatabase:
                 writer.writeheader()
                 writer.writerows(data)
         return dest
+
+    def clean(self):
+        """
+        Deletes all database entries with a missing market data file.
+
+        This method reduces the need to reindex the database whenever the files are
+        removed from it. However, reindexing can be faster if a large number of files
+        has been removed.
+        """
+        # Cannot process data if it has not been indexed
+        if not self._index_file.exists():
+            raise IndexMissingError(self.database_dir)
+        with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
+            # Iterate over table rows, test if market data file exists, mark files which don't
+            cursor = conn.cursor()
+            for row in conn.execute(
+                f"SELECT {ROWID}, {MARKET_DATA_FILE_PATH} FROM {SQL_TABLE_NAME}"
+            ):
+                row_id, data_file_path = row
+                if not os.path.exists(
+                    data_file_path
+                ):  # Faster than creating a Path object just to test this
+                    cursor.execute(
+                        f"UPDATE {SQL_TABLE_NAME} SET {MARKET_DATA_FILE_PATH} = NULL WHERE {ROWID} = {row_id}"
+                    )
+            # Delete all marked rows
+            conn.execute(
+                f"DELETE FROM {SQL_TABLE_NAME} WHERE {MARKET_DATA_FILE_PATH} IS NULL"
+            )
 
     ################# PRIVATE METHODS #######################
 

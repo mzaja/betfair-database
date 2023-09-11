@@ -32,6 +32,21 @@ class TestCLI(unittest.TestCase):
             main()
             return mock_api
 
+    @mock.patch("importlib.metadata.version")
+    def test_get_version(self, mock_importlib_version: mock.Mock):
+        """Tests retrieving the app/package version."""
+        VERSION = "x.y.z"
+        mock_importlib_version.return_value = VERSION
+        self.assertEqual(get_version(), VERSION)
+        mock_importlib_version.assert_called_with("betfairdatabase")
+
+    @mock.patch("importlib.metadata.version")
+    def test_get_version_missing_package(self, mock_importlib_version: mock.Mock):
+        """Failure in retrieving the app/package version."""
+        mock_importlib_version.side_effect = importlib.metadata.PackageNotFoundError
+        # Error should not be propagated but a placeholder value returned
+        self.assertEqual(get_version(), "")
+
     def test_index_sub_command(self):
         """Tests "index" sub-command."""
         SUB_COMMAND = "index"
@@ -94,17 +109,9 @@ class TestCLI(unittest.TestCase):
                     DATABASE_DIR, SOURCE_DIR, False, getattr(ImportPatterns, pattern)
                 )
 
-    @mock.patch("importlib.metadata.version")
-    def test_get_version(self, mock_importlib_version: mock.Mock):
-        """Tests retrieving the app/package version."""
-        VERSION = "x.y.z"
-        mock_importlib_version.return_value = VERSION
-        self.assertEqual(get_version(), VERSION)
-        mock_importlib_version.assert_called_with("betfairdatabase")
-
-    @mock.patch("importlib.metadata.version")
-    def test_get_version_missing_package(self, mock_importlib_version: mock.Mock):
-        """Failure in retrieving the app/package version."""
-        mock_importlib_version.side_effect = importlib.metadata.PackageNotFoundError
-        # Error should not be propagated but a placeholder value returned
-        self.assertEqual(get_version(), "")
+    def test_clean_sub_command(self):
+        """Tests "clean" sub-command."""
+        SUB_COMMAND = "clean"
+        self.call_main_with_args(
+            SUB_COMMAND, DATABASE_DIR
+        ).clean.assert_called_once_with(DATABASE_DIR)

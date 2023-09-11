@@ -1,6 +1,8 @@
 INDEX_FILENAME = ".betfairdatabaseindex"
 DATA_FILE_SUFFIXES = ("", ".zip", ".gz", ".bz2")
 SQL_TABLE_NAME = "BetfairDatabaseIndex"
+ROWID = "rowid"
+MARKET_DATA_FILE_PATH = "marketDataFilePath"
 SQL_TABLE_COLUMNS = (
     "marketId",
     "marketName",
@@ -36,5 +38,5 @@ SQL_TABLE_COLUMNS = (
     "raceDistanceFurlongs",
     # Keep these two fields at the end of the list
     "marketCatalogueFilePath",
-    "marketDataFilePath",
+    MARKET_DATA_FILE_PATH,
 )

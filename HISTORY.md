@@ -1,5 +1,9 @@
 # Release History
 
+## 0.3.0 (2023-09-11)
+### Improvements
+- Added `clean` method for removing entries with nonexistent files.
+
 ## 0.2.0 (2023-08-27)
 ### Improvements
 - New `insert` method for updating the database with new files.

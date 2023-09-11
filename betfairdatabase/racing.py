@@ -123,5 +123,6 @@ class RacingDataProcessor:
                 return metadata
             except KeyError:
                 # Unsuitable market catalogue
+                # Also raised by make_race_id() if race_id cannot be constructed
                 pass
         return None

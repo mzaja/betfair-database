@@ -3,14 +3,17 @@ import csv
 import os
 import sqlite3
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
 from betfairdatabase.const import (
     INDEX_FILENAME,
+    MARKET_CATALOGUE_FILE_PATH,
     MARKET_DATA_FILE_PATH,
     ROWID,
     SQL_TABLE_COLUMNS,
     SQL_TABLE_NAME,
+    DuplicatePolicy,
+    SQLAction,
 )
 from betfairdatabase.exceptions import (
     IndexExistsError,
@@ -53,7 +56,8 @@ class BetfairDatabase:
         # Construct index
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
             conn.execute(
-                f"CREATE TABLE {SQL_TABLE_NAME}({','.join(SQL_TABLE_COLUMNS)})"
+                f"CREATE TABLE {SQL_TABLE_NAME}({','.join(SQL_TABLE_COLUMNS)}"
+                f", UNIQUE({','.join(SQL_TABLE_COLUMNS[-2:])}))"
             )
             return self._handle_market_catalogues(self.database_dir, conn)
 
@@ -62,6 +66,8 @@ class BetfairDatabase:
         source_dir: str | Path,
         copy: bool = False,
         pattern: Callable[[dict], str] = ImportPatterns.betfair_historical,
+        on_duplicates: DuplicatePolicy
+        | Literal["skip", "replace", "update"] = DuplicatePolicy.UPDATE,
     ) -> int:
         """
         Inserts market catalogue/data files from source_dir into the database.
@@ -73,11 +79,16 @@ class BetfairDatabase:
         A custom import pattern can be provided to instruct the database how to
         interally organise the files into directories.
         """
+        duplicate_policy = DuplicatePolicy(on_duplicates)
         if not self._index_file.exists():
             self.index()  # Make a database if it does not exist
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
             return self._handle_market_catalogues(
-                source_dir, conn, copy=copy, pattern=pattern
+                source_dir,
+                conn,
+                copy=copy,
+                pattern=pattern,
+                on_duplicates=duplicate_policy,
             )
 
     def select(
@@ -170,7 +181,8 @@ class BetfairDatabase:
                     data_file_path
                 ):  # Faster than creating a Path object just to test this
                     cursor.execute(
-                        f"UPDATE {SQL_TABLE_NAME} SET {MARKET_DATA_FILE_PATH} = NULL WHERE {ROWID} = {row_id}"
+                        f"UPDATE {SQL_TABLE_NAME}"
+                        f" SET {MARKET_DATA_FILE_PATH} = NULL WHERE {ROWID} = {row_id}"
                     )
             # Delete all marked rows
             conn.execute(
@@ -194,12 +206,13 @@ class BetfairDatabase:
         Processes market catalogues, converts the data to a tabular format and
         inserts it as rows into a SQL table.
 
-        Returns the number of SQL table rows inserted. Optionally performs additional data processing
-        for racing markets.
+        Returns the number of SQL table rows inserted. Optionally performs additional
+        data processing for racing markets.
         """
         # racing = True
         copy = kwargs.get("copy", False)
         pattern = kwargs.get("pattern", None)
+        on_duplicates = kwargs.get("on_duplicates", None)
         rows_inserted = 0
         markets = list(Market(mc) for mc in self._locate_market_catalogues(source_dir))
         # Two-pass required, so cache generated Market objects in RAM
@@ -207,13 +220,29 @@ class BetfairDatabase:
             self._racing_data_processor.add(market)  # Rejects non-racing markets
         for market in markets:
             try:
-                if pattern is not None:
+                # Database is being updated
+                if pattern and on_duplicates:
                     dest_dir = self.database_dir / pattern(market.market_catalogue_data)
-                    market = market.copy(dest_dir) if copy else market.move(dest_dir)
+                    market = (
+                        market.copy(dest_dir, on_duplicates)
+                        if copy
+                        else market.move(dest_dir, on_duplicates)
+                    )
+                    if market.sql_action is SQLAction.SKIP:
+                        continue
+
                 sql_data_map = market.create_sql_mapping(
                     # Rejects non-racing markets
                     self._racing_data_processor.get(market)
                 )
+                if market.sql_action is SQLAction.UPDATE:
+                    # SQL does not support updating a whole row at a time and requires one to list
+                    # individual fields and values to update. A simpler way to achieve the same
+                    # outcome is to delete and re-insert the row.
+                    connection.execute(
+                        f"DELETE FROM {SQL_TABLE_NAME}"
+                        f" WHERE {MARKET_CATALOGUE_FILE_PATH} = '{market.market_catalogue_file}'"
+                    )
                 connection.execute(
                     f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",
                     tuple(sql_data_map.values()),

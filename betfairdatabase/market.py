@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy as cp
 import json
 import shutil
@@ -6,7 +8,12 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from betfairdatabase.const import DATA_FILE_SUFFIXES, SQL_TABLE_COLUMNS
+from betfairdatabase.const import (
+    DATA_FILE_SUFFIXES,
+    SQL_TABLE_COLUMNS,
+    DuplicatePolicy,
+    SQLAction,
+)
 from betfairdatabase.exceptions import MarketDataFileError
 from betfairdatabase.utils import parse_datetime
 
@@ -25,6 +32,7 @@ class Market:
 
     def __init__(self, market_catalogue_file: str | Path):
         self.market_catalogue_file = Path(market_catalogue_file).resolve()
+        self.sql_action = SQLAction.INSERT
 
     @property
     def market_data_file(self) -> Path:
@@ -50,8 +58,7 @@ class Market:
     @cached_property
     def market_catalogue_data(self) -> dict:
         """Parsed market catalogue data."""
-        with open(self.market_catalogue_file, encoding="utf-8") as f:
-            return json.load(f)
+        return self._parse_json_file(self.market_catalogue_file)
 
     @cached_property
     def racing(self) -> bool:
@@ -87,7 +94,7 @@ class Market:
         # All keys not in SQL_TABLE_COLUMNS are dropped
         return {k: data.get(k, None) for k in SQL_TABLE_COLUMNS}
 
-    def copy(self, dest_dir: str | Path) -> "Market":
+    def copy(self, dest_dir: str | Path, on_duplicates: DuplicatePolicy) -> Market:
         """
         Copies the market catalogue and market data file to the destination
         directory, returning a new Market wrapper around them.
@@ -95,10 +102,9 @@ class Market:
         Caches are preserved with this operation.
         If the destination file already exists, raises FileExistsError.
         """
-        overwrite = False
-        return self._change_location(dest_dir, True, overwrite)
+        return self._change_location(dest_dir, True, on_duplicates)
 
-    def move(self, dest_dir: str | Path) -> "Market":
+    def move(self, dest_dir: str | Path, on_duplicates: DuplicatePolicy) -> Market:
         """
         Moves the market catalogue and market data file to the destination
         directory, modifying this object in place and returning a reference to it.
@@ -106,10 +112,15 @@ class Market:
         Caches are preserved with this operation.
         If the destination file already exists, raises FileExistsError.
         """
-        overwrite = False
-        return self._change_location(dest_dir, False, overwrite)
+        return self._change_location(dest_dir, False, on_duplicates)
 
     ################# PRIVATE METHODS #######################
+
+    @staticmethod
+    def _parse_json_file(file: Path) -> dict:
+        """Parses a JSON file and returns it as a dict."""
+        with open(file, encoding="utf-8") as f:
+            return json.load(f)
 
     @staticmethod
     def _flatten_subdict(parent_dict: dict[str, Any], child_key: str) -> None:
@@ -167,34 +178,60 @@ class Market:
         return data
 
     def _change_location(
-        self, dest_dir: str | Path, copy: bool, overwrite: bool
-    ) -> "Market":
+        self, dest_dir: str | Path, copy: bool, on_duplicates: DuplicatePolicy
+    ) -> Market:
         """
         Returns a new Market object where the paths to market catalogue and
         market data files have been updated as if the .
         """
+        # Determine output dir and destination file paths
         dest_dir = Path(dest_dir).resolve()
+
+        # Process market catalogue?
         market_catalogue_dest_file = dest_dir / self.market_catalogue_file.name
+        if market_catalogue_dest_file.exists():
+            if on_duplicates is DuplicatePolicy.REPLACE:
+                # With this policy we replace the file no matter what
+                self.sql_action = SQLAction.UPDATE
+            elif (on_duplicates is DuplicatePolicy.SKIP) or (
+                self.market_catalogue_data
+                == self._parse_json_file(market_catalogue_dest_file)
+            ):
+                # Policy is SKIP or market catalogue data has not been modified
+                self.sql_action = SQLAction.SKIP
+            else:  # Policy is UPDATE and market catalogue data has been modified
+                self.sql_action = SQLAction.UPDATE
+        process_market_catalogue = self.sql_action is not SQLAction.SKIP
+
+        # Process market data file?
         market_data_dest_file = dest_dir / self.market_data_file.name
-        if (overwrite is False) and market_catalogue_dest_file.exists():
-            raise FileExistsError(
-                f"Market catalogue file already exists at '{market_catalogue_dest_file}'."
-            )
-        elif (overwrite is False) and market_data_dest_file.exists():
-            raise FileExistsError(
-                f"Market data file already exists at '{market_data_dest_file}'."
-            )
-        else:
-            # Copy or move the files to the destination
+        process_market_data_file = True
+        if market_data_dest_file.exists():
+            if (on_duplicates is DuplicatePolicy.SKIP) or (
+                (on_duplicates is DuplicatePolicy.UPDATE)
+                and (
+                    # Incoming market data is smaller or equal to the existing one
+                    market_data_dest_file.stat().st_size
+                    <= self.market_data_file.stat().st_size
+                )
+            ):
+                process_market_data_file = False
+
+        # Copy or move the files to the destination if required
+        if process_market_catalogue or process_market_data_file:
             if copy:
                 file_operation = shutil.copy
                 market = cp.copy(self)  # Create a copy of itself to modify
             else:
                 file_operation = shutil.move
                 market = self  # Modify itself in-place
-            market_catalogue_dest_file.mkdir(exist_ok=True, parents=True)
-            file_operation(self.market_catalogue_file, market_catalogue_dest_file)
-            file_operation(self.market_data_file, market_data_dest_file)
-            market.market_catalogue_file = market_catalogue_dest_file
-            market._market_data_file = market_data_dest_file
+            dest_dir.mkdir(exist_ok=True, parents=True)
+            if process_market_catalogue:
+                file_operation(self.market_catalogue_file, market_catalogue_dest_file)
+                market.market_catalogue_file = market_catalogue_dest_file
+            if process_market_data_file:
+                file_operation(self.market_data_file, market_data_dest_file)
+                market._market_data_file = market_data_dest_file
             return market
+        else:
+            return self

@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
+from betfairdatabase.const import DuplicatePolicy
 from betfairdatabase.database import BetfairDatabase
 from betfairdatabase.utils import ImportPatterns
 
@@ -64,6 +65,8 @@ def insert(
     source_dir: str | Path,
     copy: bool = False,
     pattern: Callable[[dict], str] = ImportPatterns.betfair_historical,
+    on_duplicates: DuplicatePolicy
+    | Literal["skip", "replace", "update"] = DuplicatePolicy.UPDATE,
 ) -> int:
     """
     Inserts market catalogue/data files from source_dir into the database.
@@ -75,7 +78,9 @@ def insert(
     A custom import pattern can be provided to instruct the database how to
     interally organise the files into directories.
     """
-    return BetfairDatabase(database_dir).insert(source_dir, copy, pattern)
+    return BetfairDatabase(database_dir).insert(
+        source_dir, copy, pattern, on_duplicates
+    )
 
 
 def clean(database_dir: str | Path):

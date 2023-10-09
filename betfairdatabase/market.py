@@ -140,7 +140,7 @@ class Market:
         return None if obj is None else str(obj)
 
     @cache
-    def _transform_market_catalogue(self):
+    def _transform_market_catalogue(self) -> dict:
         """
         Transforms parsed market catalogue data into a flat dict
         representation suitable for SQL table import.
@@ -194,8 +194,9 @@ class Market:
                 # With this policy we replace the file no matter what
                 self.sql_action = SQLAction.UPDATE
             elif (on_duplicates is DuplicatePolicy.SKIP) or (
-                self.market_catalogue_data
-                == self._parse_json_file(market_catalogue_dest_file)
+                # Only the difference in data that goes into the SQL table matters
+                self._transform_market_catalogue()
+                == Market(market_catalogue_dest_file)._transform_market_catalogue()
             ):
                 # Policy is SKIP or market catalogue data has not been modified
                 self.sql_action = SQLAction.SKIP
@@ -210,9 +211,8 @@ class Market:
             if (on_duplicates is DuplicatePolicy.SKIP) or (
                 (on_duplicates is DuplicatePolicy.UPDATE)
                 and (
-                    # Incoming market data is smaller or equal to the existing one
-                    market_data_dest_file.stat().st_size
-                    <= self.market_data_file.stat().st_size
+                    market_data_dest_file.stat().st_size  # Existing file size
+                    >= self.market_data_file.stat().st_size  # Incoming file size
                 )
             ):
                 process_market_data_file = False

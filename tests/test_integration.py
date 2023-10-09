@@ -15,7 +15,7 @@ class TestIntegrationBase(unittest.TestCase):
     Base integration test scenario.
     """
 
-    TEST_DATA_DIR_SRC = Path("./tests/data")
+    TEST_DATA_DIR_SRC = Path("./tests/data/datasets")
 
     @classmethod
     def setup_test_fixtures(cls):
@@ -24,7 +24,7 @@ class TestIntegrationBase(unittest.TestCase):
         2. Copies test data to it.
         3. Lists the copied files into categories.
         """
-        cls.test_data_dir = Path(tempfile.mkdtemp())
+        cls.test_data_dir = Path(tempfile.mkdtemp()).resolve()
         shutil.copytree(cls.TEST_DATA_DIR_SRC, cls.test_data_dir, dirs_exist_ok=True)
         cls.all_source_files = {p.resolve() for p in cls.test_data_dir.rglob("1.*")}
         cls.catalogue_source_files = {
@@ -381,6 +381,22 @@ class TestIntegrationPart2(TestIntegrationBase):
     def tearDown(self):
         self.teardown_test_fixtures()
 
+    def duplicates_test_setup(self) -> Path:
+        """
+        Sets up the test cases using duplicate files and returns the path to duplicates
+        source folder.
+        """
+        bfdb.insert(self.database_dir, self.dataset_1)
+        bfdb.insert(self.database_dir, self.dataset_2)
+        # Duplicates are:
+        # 1.201590187.zip:  Larger than the existing file.
+        # 1.216395251.json: marketStartTime changed to "2023-07-28T02:35:00.000Z".
+        # 1.216418252.json: totalMatched changed to 134763.88 (irrelevant change)
+        # The rest: Content identical to originals.
+        dest_dir = self.test_data_dir / "duplicates"
+        shutil.copytree("./tests/data/duplicates", dest_dir, dirs_exist_ok=True)
+        return dest_dir
+
     def base_test_move_insert(self, copy: bool, leftover_files: list[list[str]]):
         """Base test for testing copy/move style insert method."""
         test_cases = [
@@ -399,23 +415,78 @@ class TestIntegrationPart2(TestIntegrationBase):
                     [f.name for f in dataset.iterdir()], leftover_src_files
                 )
 
-    def test_move(self):
-        """Tests updating the database by moving the files into it."""
+    def test_move_to_empty_database(self):
+        """Tests updating the new database by moving the files into it."""
         self.base_test_move_insert(False, [["1.199967351.json"], []])
 
-    def test_copy(self):
-        """Tests updating the database by copying the files into it."""
+    def test_copy_to_empty_database(self):
+        """Tests updating the new database by copying the files into it."""
         self.base_test_move_insert(
             True,
             [
+                # Source files are still intact
                 [f.name for f in self.dataset_1.iterdir()],
                 [f.name for f in self.dataset_2.iterdir()],
             ],
         )
 
-        # Test raising an exception if the destination file already exists
-        with self.assertRaises(FileExistsError):
-            bfdb.insert(self.database_dir, self.dataset_1)
+    def base_test_db_integrity_after_duplicates_update(self, old_db_data: list[dict]):
+        """Only one value in the whole database should be updated."""
+        new_db_data = bfdb.select(self.database_dir)
+        for old_row, new_row in zip(
+            sorted(old_db_data, key=lambda x: x["marketId"]),
+            sorted(new_db_data, key=lambda x: x["marketId"]),
+        ):
+            if new_row["marketId"] == "1.216395251":
+                self.assertEqual(new_row["marketStartTime"], "2023-07-28T02:35:00.000Z")
+                self.assertNotEqual(
+                    new_row["marketStartTime"], old_row["marketStartTime"]
+                )
+            else:
+                self.assertEqual(new_row, old_row)
+
+    def test_insert_duplicates_skip(self):
+        """
+        Tests "skip" duplicate resolution policy.
+
+        None of the files are moved and the database is not updated.
+        """
+        duplicates_dir = self.duplicates_test_setup()
+        old_db_data = bfdb.select(self.database_dir)
+        bfdb.insert(self.database_dir, duplicates_dir, copy=False, on_duplicates="skip")
+        self.assertEqual(len([p for p in duplicates_dir.iterdir()]), 6)  # Nothing moved
+        self.assertEqual(old_db_data, bfdb.select(self.database_dir))  # Database intact
+
+    def test_insert_duplicates_replace(self):
+        """
+        Tests "replace" duplicate resolution policy.
+
+        All files are moved and the database is updated.
+        """
+        duplicates_dir = self.duplicates_test_setup()
+        old_db_data = bfdb.select(self.database_dir)
+        bfdb.insert(
+            self.database_dir, duplicates_dir, copy=False, on_duplicates="replace"
+        )
+        self.assertEqual(len([p for p in duplicates_dir.iterdir()]), 0)  # All moved
+        self.base_test_db_integrity_after_duplicates_update(old_db_data)  # DB updated
+
+    def test_insert_duplicates_update(self):
+        """
+        Tests "update" duplicate resolution policy.
+
+        Only '1.201590187.zip' and '1.216395251.json' are moved. Database is updated.
+        """
+        duplicates_dir = self.duplicates_test_setup()
+        old_db_data = bfdb.select(self.database_dir)
+        bfdb.insert(
+            self.database_dir, duplicates_dir, copy=False, on_duplicates="update"
+        )
+        remaining_files = [p.name for p in duplicates_dir.iterdir()]
+        self.assertEqual(len(remaining_files), 4)  # Two files moved
+        self.assertNotIn("1.201590187.zip", remaining_files)
+        self.assertNotIn("1.216395251.json", remaining_files)
+        self.base_test_db_integrity_after_duplicates_update(old_db_data)  # DB updated
 
     def test_clean(self):
         """Tests removing rows with missing market data files from the database."""

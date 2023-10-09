@@ -9,7 +9,7 @@ from betfairdatabase.racing import (
     extract_race_metadata,
 )
 
-TEST_DATA_DIR = Path("./tests/data")
+TEST_DATA_DIR = Path("./tests/data/datasets")
 
 # WIN market names for extracing race metadata
 # UK, IRE, USA events

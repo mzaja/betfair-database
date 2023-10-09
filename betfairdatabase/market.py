@@ -74,11 +74,14 @@ class Market:
             return False
 
     def create_sql_mapping(
-        self, additional_metadata: dict | None = None
+        self, additional_metadata: dict | None = None, no_paths: bool = False
     ) -> dict[str, Any]:
         """
         Returns a dictionary where keys are SQL table column names and
         values are values in a row.
+
+        If no_paths is True, marketCatalogueFilePath and marketDataFilePath
+        field values are set to None.
         """
         # Call below is cached, so it must be a separate method
         data = self._transform_market_catalogue()
@@ -88,8 +91,11 @@ class Market:
             data.update(additional_metadata)
 
         # Insert file location info
-        data["marketCatalogueFilePath"] = self._str_or_none(self.market_catalogue_file)
-        data["marketDataFilePath"] = self._str_or_none(self.market_data_file)
+        if not no_paths:
+            data["marketCatalogueFilePath"] = self._str_or_none(
+                self.market_catalogue_file
+            )
+            data["marketDataFilePath"] = self._str_or_none(self.market_data_file)
 
         # All keys not in SQL_TABLE_COLUMNS are dropped
         return {k: data.get(k, None) for k in SQL_TABLE_COLUMNS}
@@ -195,8 +201,8 @@ class Market:
                 self.sql_action = SQLAction.UPDATE
             elif (on_duplicates is DuplicatePolicy.SKIP) or (
                 # Only the difference in data that goes into the SQL table matters
-                self._transform_market_catalogue()
-                == Market(market_catalogue_dest_file)._transform_market_catalogue()
+                self.create_sql_mapping(no_paths=True)
+                == Market(market_catalogue_dest_file).create_sql_mapping(no_paths=True)
             ):
                 # Policy is SKIP or market catalogue data has not been modified
                 self.sql_action = SQLAction.SKIP

@@ -390,7 +390,7 @@ class TestIntegrationPart2(TestIntegrationBase):
         bfdb.insert(self.database_dir, self.dataset_2)
         # Duplicates are:
         # 1.201590187.zip:  Larger than the existing file.
-        # 1.216395251.json: marketStartTime changed to "2023-07-28T02:35:00.000Z".
+        # 1.216395251.json: marketTime changed to "2023-07-28T02:35:00.000Z".
         # 1.216418252.json: totalMatched changed to 134763.88 (irrelevant change)
         # The rest: Content identical to originals.
         dest_dir = self.test_data_dir / "duplicates"
@@ -438,12 +438,11 @@ class TestIntegrationPart2(TestIntegrationBase):
             sorted(new_db_data, key=lambda x: x["marketId"]),
         ):
             if new_row["marketId"] == "1.216395251":
-                self.assertEqual(new_row["marketStartTime"], "2023-07-28T02:35:00.000Z")
+                self.assertEqual(new_row["marketTime"], "2023-07-28T02:35:00.000Z")
                 self.assertNotEqual(
-                    new_row["marketStartTime"], old_row["marketStartTime"]
+                    new_row.pop("marketTime"), old_row.pop("marketTime")
                 )
-            else:
-                self.assertEqual(new_row, old_row)
+            self.assertEqual(new_row, old_row)
 
     def test_insert_duplicates_skip(self):
         """

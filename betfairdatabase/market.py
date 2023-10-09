@@ -224,20 +224,20 @@ class Market:
                 process_market_data_file = False
 
         # Copy or move the files to the destination if required
-        if process_market_catalogue or process_market_data_file:
-            if copy:
-                file_operation = shutil.copy
-                market = cp.copy(self)  # Create a copy of itself to modify
-            else:
-                file_operation = shutil.move
-                market = self  # Modify itself in-place
-            dest_dir.mkdir(exist_ok=True, parents=True)
-            if process_market_catalogue:
-                file_operation(self.market_catalogue_file, market_catalogue_dest_file)
-                market.market_catalogue_file = market_catalogue_dest_file
-            if process_market_data_file:
-                file_operation(self.market_data_file, market_data_dest_file)
-                market._market_data_file = market_data_dest_file
-            return market
+        if copy:
+            file_operation = shutil.copy
+            market = cp.copy(self)  # Create a copy of itself to modify
         else:
-            return self
+            file_operation = shutil.move
+            market = self  # Modify itself in-place
+
+        dest_dir.mkdir(exist_ok=True, parents=True)
+        if process_market_catalogue:
+            file_operation(self.market_catalogue_file, market_catalogue_dest_file)
+        if process_market_data_file:
+            file_operation(self.market_data_file, market_data_dest_file)
+
+        # Always change paths to the database dir, regardless if the files were moved or not
+        market.market_catalogue_file = market_catalogue_dest_file
+        market._market_data_file = market_data_dest_file
+        return market

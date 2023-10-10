@@ -180,5 +180,5 @@ class TestCLI(unittest.TestCase):
         """Tests calling the module with the -m flag."""
         # Unfortunately, this test does not increase code coverage
         python_exe = "python" + ("3" if platform.system() == "Linux" else "")
-        proc = subprocess.run(f"{python_exe} -m betfairdatabase --version")
+        proc = subprocess.run(f"{python_exe} -m betfairdatabase --version", shell=True)
         self.assertEqual(proc.returncode, 0)

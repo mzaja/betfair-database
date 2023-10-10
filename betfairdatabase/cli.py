@@ -4,6 +4,7 @@ from betfairdatabase import api
 from betfairdatabase.utils import ImportPatterns
 
 IMPORT_PATTERNS = ("betfair_historical", "event_id", "flat")
+ON_DUPLICATES = ("skip", "replace", "update")
 
 
 def get_version() -> str:
@@ -87,9 +88,16 @@ def get_parser() -> ArgumentParser:
     parser_insert.add_argument(
         "-p",
         "--pattern",
-        default=IMPORT_PATTERNS[0],
+        default=IMPORT_PATTERNS[0],  # betfair_historical
         choices=IMPORT_PATTERNS,
         help="File import pattern.",
+    )
+    parser_insert.add_argument(
+        "-d",
+        "--on-duplicates",
+        default=ON_DUPLICATES[-1],  # update
+        choices=ON_DUPLICATES,
+        help="Duplicate handling policy.",
     )
 
     # Sub-parser for clean command
@@ -117,10 +125,17 @@ def main():
         case "insert":
             # Parser should catch invalid options for "pattern"
             pattern = getattr(ImportPatterns, args.pattern)
-            api.insert(args.database_dir, args.source_dir, args.copy, pattern)
+            api.insert(
+                args.database_dir,
+                args.source_dir,
+                args.copy,
+                pattern,
+                args.on_duplicates,
+            )
         case "clean":
             api.clean(args.database_dir)
-        case _:
+        case _:  # pragma: no cover
+            # This branch should never be reached as arg parser validates sub-commands
             print("Unsupported sub-command.")
             parser.print_help()
             exit(1)

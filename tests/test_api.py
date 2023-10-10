@@ -1,15 +1,11 @@
+import inspect
 import unittest
+from collections import OrderedDict
 from unittest import mock
 
-from betfairdatabase.api import (
-    BetfairDatabase,
-    clean,
-    columns,
-    export,
-    index,
-    insert,
-    select,
-)
+import betfairdatabase.api as api
+
+API_METHOD_NAMES = ("clean", "columns", "export", "index", "insert", "select")
 
 
 class TestAPI(unittest.TestCase):
@@ -28,13 +24,32 @@ class TestAPI(unittest.TestCase):
         """
         Docstrings for module-level API and BetfariDatabase class must be identical.
         """
-        db = BetfairDatabase(".")
-        self.assert_docstrings_equal(index.__doc__, db.index.__doc__)
-        self.assert_docstrings_equal(select.__doc__, db.select.__doc__)
-        self.assert_docstrings_equal(columns.__doc__, db.columns.__doc__)
-        self.assert_docstrings_equal(export.__doc__, db.export.__doc__)
-        self.assert_docstrings_equal(insert.__doc__, db.insert.__doc__)
-        self.assert_docstrings_equal(clean.__doc__, db.clean.__doc__)
+        for method_name in API_METHOD_NAMES:
+            self.assert_docstrings_equal(
+                getattr(api, method_name).__doc__,
+                getattr(api.BetfairDatabase, method_name).__doc__,
+            )
+
+    def test_signature_equality(self):
+        """
+        Tests equality of call signatures between module-level and OOP interfaces.
+        This test covers argument names, order, default value, kind (keyword/positional/both)
+        and annotations.
+        """
+        oop_init_param = inspect.signature(api.BetfairDatabase.__init__).parameters[
+            "database_dir"
+        ]
+        for method_name in API_METHOD_NAMES:
+            api_sign = inspect.signature(getattr(api, method_name))
+            oop_sign = inspect.signature(getattr(api.BetfairDatabase, method_name))
+            self.assertEqual(api_sign.return_annotation, oop_sign.return_annotation)
+            # Test parameters
+            api_params = OrderedDict(api_sign.parameters)
+            oop_params = OrderedDict(oop_sign.parameters)
+            oop_params.pop("self", None)
+            if database_dir_param := api_params.pop("database_dir", None):
+                self.assertEqual(database_dir_param, oop_init_param)
+            self.assertEqual(api_params, oop_params)
 
     def test_delegated_calls(self):
         """
@@ -50,7 +65,7 @@ class TestAPI(unittest.TestCase):
             ) as mock_db_class:
                 mock_db_instance = mock.Mock()
                 mock_db_class.return_value = mock_db_instance
-                globals()[api_func_name](
+                getattr(api, api_func_name)(
                     *CALL_ARGS.get(api_func_name, DEFAULT_CALL_ARGS)
                 )
                 mock_db_class.assert_called_with(DATABASE_DIR)
@@ -60,5 +75,5 @@ class TestAPI(unittest.TestCase):
         with self.subTest(api_func="columns"), mock.patch(
             "betfairdatabase.api.BetfairDatabase"
         ) as mock_db_class:
-            columns()
-            mock_db_class.columns.assert_called()
+            api.columns()
+            mock_db_class.columns.assert_called_with()

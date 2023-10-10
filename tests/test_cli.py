@@ -1,9 +1,18 @@
 import importlib.metadata
+import inspect
 import sys
 import unittest
 from unittest import mock
 
-from betfairdatabase.cli import IMPORT_PATTERNS, get_version, main
+import betfairdatabase.api as api
+from betfairdatabase.cli import (
+    IMPORT_PATTERNS,
+    ON_DUPLICATES,
+    get_parser,
+    get_version,
+    main,
+)
+from betfairdatabase.const import DuplicatePolicy
 from betfairdatabase.utils import ImportPatterns
 
 DATABASE_DIR = "./my_db_dir"
@@ -87,26 +96,59 @@ class TestCLI(unittest.TestCase):
         for pattern in IMPORT_PATTERNS:
             getattr(ImportPatterns, pattern)
 
+    def test_duplicate_policies_valid(self):
+        """Tests that import policy options are complete and valid."""
+        self.assertEqual(len(ON_DUPLICATES), len(DuplicatePolicy))
+        self.assertSetEqual(set(ON_DUPLICATES), set(x.value for x in DuplicatePolicy))
+
     def test_insert_sub_command(self):
         """Tests "insert" sub-command."""
+        # Test setup
         SUB_COMMAND = "insert"
         SOURCE_DIR = "./my_src_dir"
+        copy_default = False
+        pattern_default = ImportPatterns.betfair_historical
+        on_duplicates_default = DuplicatePolicy.UPDATE.value
         # Without options
         self.call_main_with_args(
             SUB_COMMAND, DATABASE_DIR, SOURCE_DIR
-        ).insert.assert_called_once_with(DATABASE_DIR, SOURCE_DIR, False, mock.ANY)
+        ).insert.assert_called_once_with(
+            DATABASE_DIR,
+            SOURCE_DIR,
+            copy_default,
+            pattern_default,
+            on_duplicates_default,
+        )
         # Copy option
         for option in ("-c", "--copy"):
             self.call_main_with_args(
                 SUB_COMMAND, DATABASE_DIR, SOURCE_DIR, option
-            ).insert.assert_called_once_with(DATABASE_DIR, SOURCE_DIR, True, mock.ANY)
+            ).insert.assert_called_once_with(
+                DATABASE_DIR, SOURCE_DIR, True, pattern_default, on_duplicates_default
+            )
         # Pattern option
         for option in ("-p", "--pattern"):
             for pattern in IMPORT_PATTERNS:
                 self.call_main_with_args(
                     SUB_COMMAND, DATABASE_DIR, SOURCE_DIR, option, pattern
                 ).insert.assert_called_once_with(
-                    DATABASE_DIR, SOURCE_DIR, False, getattr(ImportPatterns, pattern)
+                    DATABASE_DIR,
+                    SOURCE_DIR,
+                    copy_default,
+                    getattr(ImportPatterns, pattern),
+                    on_duplicates_default,
+                )
+        # Duplicates option
+        for option in ("-d",):  # "--on-duplicates"):
+            for policy in ON_DUPLICATES:
+                self.call_main_with_args(
+                    SUB_COMMAND, DATABASE_DIR, SOURCE_DIR, option, policy
+                ).insert.assert_called_once_with(
+                    DATABASE_DIR,
+                    SOURCE_DIR,
+                    copy_default,
+                    pattern_default,
+                    policy,
                 )
 
     def test_clean_sub_command(self):
@@ -115,3 +157,19 @@ class TestCLI(unittest.TestCase):
         self.call_main_with_args(
             SUB_COMMAND, DATABASE_DIR
         ).clean.assert_called_once_with(DATABASE_DIR)
+
+    def test_parser(self):
+        """Parser should return enough options to cover all API input parameters."""
+        parser = get_parser()
+        for cmd, method in [
+            (["index", DATABASE_DIR], api.index),
+            (["export", DATABASE_DIR, "dst"], api.export),
+            (["insert", DATABASE_DIR, "src"], api.insert),
+            (["clean", DATABASE_DIR], api.clean),
+        ]:
+            with self.subTest(cmd=cmd):
+                args = parser.parse_args(cmd)
+                self.assertEqual(
+                    len(vars(args)) - 1,  # -1 because a sub-command is one arg
+                    len(inspect.signature(method).parameters),
+                )

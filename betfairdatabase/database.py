@@ -74,10 +74,16 @@ class BetfairDatabase:
 
         Returns the number of inserted table rows (market catalogue/data file pairs).
 
-        Files must not exist at the destination, otherwise FileExistsError is raised.
-        If copy is True, copies the files instead of moving them.
         A custom import pattern can be provided to instruct the database how to
         interally organise the files into directories.
+
+        Procedure for handling duplicates is specified through `on_duplicates` argument:
+            - `skip`: Duplicate files are not processed. Index is not updated.
+            - `replace`: Existing duplicate files are replaced with incoming ones. Index is updated.
+            - `update`:
+                Existing market catalogue file is replaced if the incoming file contains a change
+                which is reflected in the index, and the index is updated. Market data files are
+                replaced if the incoming data file is larger than the existing one.
         """
         duplicate_policy = DuplicatePolicy(on_duplicates)
         if not self._index_file.exists():
@@ -133,7 +139,7 @@ class BetfairDatabase:
 
     # Must be a callable as static property is not a thing
     @staticmethod
-    def columns():
+    def columns() -> list:
         """Returns a list of queryable database columns."""
         return list(SQL_TABLE_COLUMNS)
 

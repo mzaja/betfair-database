@@ -440,7 +440,9 @@ class TestIntegrationPart2(TestIntegrationBase):
             if new_row["marketId"] == "1.216395251":
                 self.assertEqual(new_row["marketTime"], "2023-07-28T02:35:00.000Z")
                 self.assertNotEqual(
-                    new_row.pop("marketTime"), old_row.pop("marketTime")
+                    # pop also removes contentious fields from the dataset
+                    new_row.pop("marketTime"),
+                    old_row.pop("marketTime"),
                 )
             self.assertEqual(new_row, old_row)
 
@@ -448,7 +450,7 @@ class TestIntegrationPart2(TestIntegrationBase):
         """
         Tests "skip" duplicate resolution policy.
 
-        None of the files are moved and the database is not updated.
+        None of the files are moved and the index is not updated.
         """
         duplicates_dir = self.duplicates_test_setup()
         old_db_data = bfdb.select(self.database_dir)
@@ -460,7 +462,7 @@ class TestIntegrationPart2(TestIntegrationBase):
         """
         Tests "replace" duplicate resolution policy.
 
-        All files are moved and the database is updated.
+        All files are moved and the index is updated.
         """
         duplicates_dir = self.duplicates_test_setup()
         old_db_data = bfdb.select(self.database_dir)
@@ -474,7 +476,7 @@ class TestIntegrationPart2(TestIntegrationBase):
         """
         Tests "update" duplicate resolution policy.
 
-        Only '1.201590187.zip' and '1.216395251.json' are moved. Database is updated.
+        Only '1.201590187.zip' and '1.216395251.json' are moved. Index is updated.
         """
         duplicates_dir = self.duplicates_test_setup()
         old_db_data = bfdb.select(self.database_dir)

@@ -1,5 +1,6 @@
 import importlib.metadata
 import inspect
+import subprocess
 import sys
 import unittest
 from unittest import mock
@@ -173,3 +174,9 @@ class TestCLI(unittest.TestCase):
                     len(vars(args)) - 1,  # -1 because a sub-command is one arg
                     len(inspect.signature(method).parameters),
                 )
+
+    def test_calling_module(self):
+        """Tests calling the module with the -m flag."""
+        # Unfortunately, this test does not increase code coverage
+        proc = subprocess.run(f'"{sys.executable}" -m betfairdatabase --version')
+        self.assertEqual(proc.returncode, 0)

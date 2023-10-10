@@ -178,5 +178,5 @@ class TestCLI(unittest.TestCase):
     def test_calling_module(self):
         """Tests calling the module with the -m flag."""
         # Unfortunately, this test does not increase code coverage
-        proc = subprocess.run(f'"{sys.executable}" -m betfairdatabase --version')
+        proc = subprocess.run(f"python -m betfairdatabase --version")
         self.assertEqual(proc.returncode, 0)

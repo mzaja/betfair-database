@@ -1,5 +1,10 @@
 # Release History
 
+## 1.0.0 (2023-10-10)
+### Improvements
+- `insert` method handles duplicate files.
+- Python 3.12 support added.
+
 ## 0.3.0 (2023-09-11)
 ### Improvements
 - Added `clean` method for removing entries with nonexistent files.

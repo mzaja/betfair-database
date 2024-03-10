@@ -1,7 +1,9 @@
 import contextlib
 import csv
+import logging
 import os
 import sqlite3
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Callable, Literal
 
@@ -23,6 +25,8 @@ from betfairdatabase.exceptions import (
 from betfairdatabase.market import Market
 from betfairdatabase.racing import RacingDataProcessor
 from betfairdatabase.utils import ImportPatterns
+
+logger = logging.getLogger(__name__)
 
 
 class BetfairDatabase:
@@ -66,8 +70,9 @@ class BetfairDatabase:
         source_dir: str | Path,
         copy: bool = False,
         pattern: Callable[[dict], str] = ImportPatterns.betfair_historical,
-        on_duplicates: DuplicatePolicy
-        | Literal["skip", "replace", "update"] = DuplicatePolicy.UPDATE,
+        on_duplicates: (
+            DuplicatePolicy | Literal["skip", "replace", "update"]
+        ) = DuplicatePolicy.UPDATE,
     ) -> int:
         """
         Inserts market catalogue/data files from source_dir into the database.
@@ -93,7 +98,7 @@ class BetfairDatabase:
                 source_dir,
                 conn,
                 copy=copy,
-                pattern=pattern,
+                import_pattern=pattern,
                 on_duplicates=duplicate_policy,
             )
 
@@ -206,7 +211,12 @@ class BetfairDatabase:
         return Path(target_dir).rglob("1.*.json")
 
     def _handle_market_catalogues(
-        self, source_dir: str | Path, connection: sqlite3.Connection, **kwargs
+        self,
+        source_dir: str | Path,
+        connection: sqlite3.Connection,
+        copy: bool = False,
+        import_pattern: Callable[[dict], str] | None = None,
+        on_duplicates: DuplicatePolicy | None = None,
     ) -> int:
         """
         Processes market catalogues, converts the data to a tabular format and
@@ -214,21 +224,29 @@ class BetfairDatabase:
 
         Returns the number of SQL table rows inserted. Optionally performs additional
         data processing for racing markets.
+
+        copy, import_pattern and on_duplicates need to be provided when inserting data
+        into the database, but should be omitted when indexing the database.
         """
-        # racing = True
-        copy = kwargs.get("copy", False)
-        pattern = kwargs.get("pattern", None)
-        on_duplicates = kwargs.get("on_duplicates", None)
         rows_inserted = 0
+        corrupt_markets = []
         markets = list(Market(mc) for mc in self._locate_market_catalogues(source_dir))
         # Two-pass required, so cache generated Market objects in RAM
         for market in markets:
-            self._racing_data_processor.add(market)  # Rejects non-racing markets
+            try:
+                self._racing_data_processor.add(market)  # Rejects non-racing markets
+            except JSONDecodeError:
+                logger.error(f"Error parsing '{market.market_catalogue_file}'.")
+                corrupt_markets.append(market)
+        for market in corrupt_markets:
+            markets.remove(market)
         for market in markets:
             try:
                 # Database is being updated
-                if pattern and on_duplicates:
-                    dest_dir = self.database_dir / pattern(market.market_catalogue_data)
+                if import_pattern and on_duplicates:
+                    dest_dir = self.database_dir / import_pattern(
+                        market.market_catalogue_data
+                    )
                     market = (
                         market.copy(dest_dir, on_duplicates)
                         if copy

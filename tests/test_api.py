@@ -60,9 +60,10 @@ class TestAPI(unittest.TestCase):
         CALL_ARGS = {"clean": (DATABASE_DIR,)}  # List non-default call args only
         # Test instance methods
         for api_func_name in ("index", "select", "export", "insert", "clean"):
-            with self.subTest(api_func=api_func_name), mock.patch(
-                "betfairdatabase.api.BetfairDatabase"
-            ) as mock_db_class:
+            with (
+                self.subTest(api_func=api_func_name),
+                mock.patch("betfairdatabase.api.BetfairDatabase") as mock_db_class,
+            ):
                 mock_db_instance = mock.Mock()
                 mock_db_class.return_value = mock_db_instance
                 getattr(api, api_func_name)(
@@ -72,8 +73,9 @@ class TestAPI(unittest.TestCase):
                 getattr(mock_db_instance, api_func_name).assert_called()
 
         # Test class method
-        with self.subTest(api_func="columns"), mock.patch(
-            "betfairdatabase.api.BetfairDatabase"
-        ) as mock_db_class:
+        with (
+            self.subTest(api_func="columns"),
+            mock.patch("betfairdatabase.api.BetfairDatabase") as mock_db_class,
+        ):
             api.columns()
             mock_db_class.columns.assert_called_with()

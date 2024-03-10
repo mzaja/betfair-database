@@ -65,8 +65,9 @@ def insert(
     source_dir: str | Path,
     copy: bool = False,
     pattern: Callable[[dict], str] = ImportPatterns.betfair_historical,
-    on_duplicates: DuplicatePolicy
-    | Literal["skip", "replace", "update"] = DuplicatePolicy.UPDATE,
+    on_duplicates: (
+        DuplicatePolicy | Literal["skip", "replace", "update"]
+    ) = DuplicatePolicy.UPDATE,
 ) -> int:
     """
     Inserts market catalogue/data files from source_dir into the database.

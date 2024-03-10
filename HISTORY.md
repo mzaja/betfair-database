@@ -1,5 +1,9 @@
 # Release History
 
+## 1.0.1 (2024-03-10)
+### Bug fixes
+- Unparsable market catalogue files do not break indexing and inserting.
+
 ## 1.0.0 (2023-10-10)
 ### Improvements
 - `insert` method handles duplicate files.

@@ -13,7 +13,7 @@
 @REM Check history, commit, tag the release and push to remote
 @REM =========================================================
 @REM Set release version here:
-SET RELEASE_VERSION=1.0.0
+SET RELEASE_VERSION=1.0.1
 
 @REM Check that the distribution has been built already
 IF NOT EXIST "dist\betfairdatabase-%RELEASE_VERSION%-py3-none-any.whl" (

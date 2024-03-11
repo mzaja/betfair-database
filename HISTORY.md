@@ -1,5 +1,10 @@
 # Release History
 
+## 1.1.0 (2024-03-11)
+### Improvements
+- `DatabaseDirectoryError` is raised when a database directory is not a directory or it does not exist.
+- Command line application catches errors and prints meaningful error messages.
+
 ## 1.0.1 (2024-03-10)
 ### Bug fixes
 - Unparsable market catalogue files do not break indexing and inserting.

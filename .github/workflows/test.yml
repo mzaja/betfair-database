@@ -4,6 +4,7 @@ on:
   push:
     branches:
     - main
+    - fix-CI
     paths-ignore:
     - '**.md'
   pull_request:
@@ -29,15 +30,15 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install requirements
       run: |
-        pip install --upgrade pip
+        pip install --upgrade pip &&
         pip install -r requirements-dev.txt
     - name: Check formatting
       run: |
-        black --check betfairdatabase tests
+        black --check betfairdatabase tests &&
         isort --check betfairdatabase tests
     - name: Run tests
       run: |
-        coverage run
+        coverage run &&
         coverage report
     - name: Upload coverage to Coveralls
       env:

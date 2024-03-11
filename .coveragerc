@@ -2,3 +2,6 @@
 source = betfairdatabase
 omit = betfairdatabase/__main__.py
 command_line = -m unittest discover --start-directory tests --buffer
+
+[report]
+fail_under = 100

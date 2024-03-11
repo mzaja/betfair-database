@@ -7,7 +7,11 @@ from pathlib import Path
 
 import betfairdatabase as bfdb
 from betfairdatabase.const import INDEX_FILENAME
-from betfairdatabase.exceptions import IndexExistsError, IndexMissingError
+from betfairdatabase.exceptions import (
+    DatabaseDirectoryError,
+    IndexExistsError,
+    IndexMissingError,
+)
 
 
 class TestIntegrationBase(unittest.TestCase):
@@ -66,6 +70,20 @@ class TestIntegrationPart1(TestIntegrationBase):
 
     The tests in this class require copying the test data only once.
     """
+
+    def test_database_directory_does_not_exist(self):
+        """Database directory does not exist."""
+        database_dir = "./does/not/exist"
+        with self.assertRaises(DatabaseDirectoryError) as ctx:
+            bfdb.BetfairDatabase(database_dir)
+            self.assertIn(f"'{database_dir}' does not exist.", str(ctx.exception))
+
+    def test_database_directory_is_not_a_directory(self):
+        """Database directory is not a directory."""
+        database_dir = next(self.test_data_dir.rglob("*.json"))
+        with self.assertRaises(DatabaseDirectoryError) as ctx:
+            bfdb.BetfairDatabase(database_dir)
+            self.assertIn(f"'{database_dir}' is not a directory.", str(ctx.exception))
 
     def test_index_already_exists(self):
         """Index already exists."""

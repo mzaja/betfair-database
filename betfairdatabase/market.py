@@ -105,8 +105,8 @@ class Market:
         Copies the market catalogue and market data file to the destination
         directory, returning a new Market wrapper around them.
 
+        Replaces the destination file if it already exists.
         Caches are preserved with this operation.
-        If the destination file already exists, raises FileExistsError.
         """
         return self._change_location(dest_dir, True, on_duplicates)
 
@@ -115,8 +115,8 @@ class Market:
         Moves the market catalogue and market data file to the destination
         directory, modifying this object in place and returning a reference to it.
 
+        Replaces the destination file if it already exists.
         Caches are preserved with this operation.
-        If the destination file already exists, raises FileExistsError.
         """
         return self._change_location(dest_dir, False, on_duplicates)
 
@@ -200,13 +200,14 @@ class Market:
                 # With this policy we replace the file no matter what
                 self.sql_action = SQLAction.UPDATE
             elif (on_duplicates is DuplicatePolicy.SKIP) or (
-                # Only the difference in data that goes into the SQL table matters
                 self.create_sql_mapping(no_paths=True)
                 == Market(market_catalogue_dest_file).create_sql_mapping(no_paths=True)
             ):
-                # Policy is SKIP or market catalogue data has not been modified
+                # Policy is SKIP,
+                # or policy is UPDATE the market catalogue data has not been modified
                 self.sql_action = SQLAction.SKIP
-            else:  # Policy is UPDATE and market catalogue data has been modified
+            else:
+                # Policy is UPDATE and the market catalogue data has been modified
                 self.sql_action = SQLAction.UPDATE
         process_market_catalogue = self.sql_action is not SQLAction.SKIP
 
@@ -223,7 +224,8 @@ class Market:
             ):
                 process_market_data_file = False
 
-        # Copy or move the files to the destination if required
+        # Copy or move the files to the destination if required.
+        # Both shutil.copy and shutil.move replace the destination file if it exists.
         if copy:
             file_operation = shutil.copy
             market = cp.copy(self)  # Create a copy of itself to modify

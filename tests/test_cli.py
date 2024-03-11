@@ -4,6 +4,8 @@ import platform
 import subprocess
 import sys
 import unittest
+from pathlib import Path
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import mock
 
 import betfairdatabase.api as api
@@ -182,3 +184,105 @@ class TestCLI(unittest.TestCase):
         python_exe = "python" + ("3" if platform.system() == "Linux" else "")
         proc = subprocess.run(f"{python_exe} -m betfairdatabase --version", shell=True)
         self.assertEqual(proc.returncode, 0)
+
+
+@mock.patch("builtins.print")
+@mock.patch("builtins.exit")
+class TestErrorHandling(unittest.TestCase):
+    """
+    Tests error handling in the command line application.
+    """
+
+    def setUp(self):
+        self.sys_argv_old = sys.argv
+
+    def tearDown(self):
+        sys.argv = self.sys_argv_old
+
+    @staticmethod
+    def call_main_with_args(*args) -> mock.Mock:
+        """
+        Calls the CLI with arguments and returns an API mock to test calls.
+
+        First argument (script name) should not be provided inside args.
+        """
+        sys.argv = ["bfdb"] + list(args)
+        main()
+
+    def test_index_missing_error(
+        self, mock_exit: mock.MagicMock, mock_print: mock.MagicMock
+    ):
+        """
+        IndexMissingError is caught, a meaningful error message is
+        printed and a non-zero exit code is returned.
+        """
+        with TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir).resolve()
+            self.call_main_with_args("clean", str(tmpdir))
+            self.assertNotEqual(mock_exit.call_args[0][0], 0)
+            self.assertIn(
+                f"Betfair database index not found in '{tmpdir}'.",
+                mock_print.call_args[0][0],
+            )
+
+    def test_index_exists_error(
+        self, mock_exit: mock.MagicMock, mock_print: mock.MagicMock
+    ):
+        """
+        IndexExistsError is caught, a meaningful error message is
+        printed and a non-zero exit code is returned.
+        """
+        with TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir).resolve()
+            self.call_main_with_args("index", str(tmpdir))  # All good
+            self.call_main_with_args("index", str(tmpdir))  # Error
+            self.assertNotEqual(mock_exit.call_args[0][0], 0)
+            self.assertIn(
+                f"Betfair database index already exists in '{tmpdir}'."
+                " Use -f/--force option to reindex the database.",
+                mock_print.call_args[0][0],
+            )
+
+    def test_database_directory_does_not_exist(
+        self, mock_exit: mock.MagicMock, mock_print: mock.MagicMock
+    ):
+        """
+        DatabaseDirectoryError is caught, a meaningful error
+        message is printed and a non-zero exit code is returned.
+        """
+        database_dir = "./does/not/exist"
+        for args in [
+            ("index", database_dir),
+            ("export", database_dir, "dst"),
+            ("insert", database_dir, "src"),
+            ("clean", database_dir),
+        ]:
+            with self.subTest(args=args):
+                self.call_main_with_args(*args)
+                self.assertNotEqual(mock_exit.call_args[0][0], 0)
+                self.assertIn(
+                    f"'{database_dir}' does not exist.", mock_print.call_args[0][0]
+                )
+
+    def test_test_database_directory_is_not_a_directory(
+        self, mock_exit: mock.MagicMock, mock_print: mock.MagicMock
+    ):
+        """
+        DatabaseDirectoryError is caught, a meaningful error
+        message is printed and a non-zero exit code is returned.
+        """
+        with NamedTemporaryFile() as tmpf:
+            database_dir = tmpf.name
+            for args in [
+                ("index", database_dir),
+                ("export", database_dir, "dst"),
+                ("insert", database_dir, "src"),
+                ("clean", database_dir),
+            ]:
+                with self.subTest(args=args):
+                    self.call_main_with_args(*args)
+                    self.assertNotEqual(mock_exit.call_args[0][0], 0)
+                    self.assertIn(
+                        f"'{database_dir}' is not a directory.",
+                        mock_print.call_args[0][0],
+                    )

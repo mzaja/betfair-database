@@ -1,6 +1,11 @@
 from argparse import ArgumentParser
 
 from betfairdatabase import api
+from betfairdatabase.exceptions import (
+    DatabaseDirectoryError,
+    IndexExistsError,
+    IndexMissingError,
+)
 from betfairdatabase.utils import ImportPatterns
 
 IMPORT_PATTERNS = ("betfair_historical", "event_id", "flat")
@@ -117,26 +122,40 @@ def main():
     """Entry point for the command line app."""
     parser = get_parser()
     args = parser.parse_args()
-    match args.command:
-        case "index":
-            api.index(args.database_dir, args.force)
-        case "export":
-            api.export(args.database_dir, args.dest)
-        case "insert":
-            # Parser should catch invalid options for "pattern"
-            pattern = getattr(ImportPatterns, args.pattern)
-            api.insert(
-                args.database_dir,
-                args.source_dir,
-                args.copy,
-                pattern,
-                args.on_duplicates,
-            )
-        case "clean":
-            api.clean(args.database_dir)
-        case _:  # pragma: no cover
-            # This branch should never be reached as arg parser validates sub-commands
-            print("Unsupported sub-command.")
-            parser.print_help()
-            exit(1)
+    try:
+        match args.command:
+            case "index":
+                try:
+                    api.index(args.database_dir, args.force)
+                except IndexExistsError as ex:
+                    print(
+                        ex.base_msg + " Use -f/--force option to reindex the database."
+                    )
+                    exit(1)
+            case "export":
+                api.export(args.database_dir, args.dest)
+            case "insert":
+                # Parser should catch invalid options for "pattern"
+                pattern = getattr(ImportPatterns, args.pattern)
+                api.insert(
+                    args.database_dir,
+                    args.source_dir,
+                    args.copy,
+                    pattern,
+                    args.on_duplicates,
+                )
+            case "clean":
+                try:
+                    api.clean(args.database_dir)
+                except IndexMissingError as ex:
+                    print(str(ex))
+                    exit(1)
+            case _:  # pragma: no cover
+                # This branch should never be reached as arg parser validates sub-commands
+                print("Unsupported sub-command.")
+                parser.print_help()
+                exit(1)
+    except DatabaseDirectoryError as ex:
+        print(str(ex))
+        exit(1)
     return

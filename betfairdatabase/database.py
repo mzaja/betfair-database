@@ -18,6 +18,7 @@ from betfairdatabase.const import (
     SQLAction,
 )
 from betfairdatabase.exceptions import (
+    DatabaseDirectoryError,
     IndexExistsError,
     IndexMissingError,
     MarketDataFileError,
@@ -37,6 +38,13 @@ class BetfairDatabase:
 
     def __init__(self, database_dir: str | Path):
         self.database_dir = Path(database_dir)
+        if not self.database_dir.exists():
+            # This is the most elegant place to raise this error
+            # since most methods depend on it, although it makes
+            # it slightly awkward.
+            raise DatabaseDirectoryError(f"'{database_dir}' does not exist.")
+        if not self.database_dir.is_dir():
+            raise DatabaseDirectoryError(f"'{database_dir}' is not a directory.")
         self._index_file = self.database_dir / INDEX_FILENAME
         self._racing_data_processor = RacingDataProcessor()
 
@@ -275,5 +283,4 @@ class BetfairDatabase:
             except MarketDataFileError:
                 # Log warning that a data file is missing
                 pass
-            # FileExistsErrors are not handled
         return rows_inserted

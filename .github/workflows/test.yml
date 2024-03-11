@@ -4,7 +4,6 @@ on:
   push:
     branches:
     - main
-    - fix-CI  # Used to debug problems with CI and experiment with new features
     paths-ignore:
     - '**.md'
   pull_request:
@@ -23,6 +22,9 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
     defaults:
       run:
+        # If bash is not the default shell, multi-command run steps
+        # silently pass on Windows runners even if an intermediate command
+        # fails, as long as the last command in a group returns zero.
         shell: bash
     steps:
     - name: Checkout repository
@@ -39,7 +41,7 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements-dev.txt
         if [ "$RUNNER_OS" == "Windows" ]; then
-          echo asd # pip install tzdata
+          pip install tzdata
         fi
     - name: Check formatting
       run: |

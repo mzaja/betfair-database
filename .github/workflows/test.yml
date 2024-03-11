@@ -21,6 +21,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12"]
+    defaults:
+      run:
+        shell: bash
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -32,20 +35,19 @@ jobs:
       # Test runs on Windows runners fail because tzdata package is missing.
       # However, they pass in an empty virtual environment on my machine,
       # where tzdata is not installed.
-      shell: bash
       run: |
-        pip install --upgrade pip &&
-        pip install -r requirements-dev.txt &&
+        pip install --upgrade pip
+        pip install -r requirements-dev.txt
         if [ "$RUNNER_OS" == "Windows" ]; then
-          pip install tzdata
+          echo # pip install tzdata
         fi
     - name: Check formatting
       run: |
-        black --check betfairdatabase tests &&
+        black --check betfairdatabase tests
         isort --check betfairdatabase tests
     - name: Run tests
       run: |
-        coverage run &&
+        coverage run
         coverage report
     - name: Upload coverage to Coveralls
       env:

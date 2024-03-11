@@ -35,7 +35,7 @@ class TestBetfairDatabase(unittest.TestCase):
             database.index()
             self.assertIsNotNone(
                 re.search(
-                    "Error parsing '.*1\.221089567\.json'",
+                    r"Error parsing '.*1\.221089567\.json'",
                     mock_logger.error.call_args[0][0],
                 )
             )  # Logging module was called with the corrupt file's name

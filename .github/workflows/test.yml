@@ -29,14 +29,15 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install requirements
-      # tzinfo seems to be missing from GitHub Actions Windows runners,
-      # but it works fine for me locally in an empty virtual environment
+      # Test runs on Windows runners fail because tzdata package is missing.
+      # However, they pass in an empty virtual environment on my machine,
+      # where tzdata is not installed.
       shell: bash
       run: |
         pip install --upgrade pip &&
         pip install -r requirements-dev.txt &&
         if [ "$RUNNER_OS" == "Windows" ]; then
-          pip install tzinfo
+          pip install tzdata
         fi
     - name: Check formatting
       run: |

@@ -9,6 +9,11 @@ Install the package from **PyPI**:
 pip install betfairdatabase
 ```
 
+On some platforms, it may be required to install `tzdata` which contains IANA time zone database:
+```
+pip install tzdata
+```
+
 ## Usage
 ### Getting started
 1. Index the folder holding historical Betfair data to turn it into a database.

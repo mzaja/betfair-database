@@ -39,7 +39,7 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements-dev.txt
         if [ "$RUNNER_OS" == "Windows" ]; then
-          echo # pip install tzdata
+          echo asd # pip install tzdata
         fi
     - name: Check formatting
       run: |

@@ -4,7 +4,7 @@ on:
   push:
     branches:
     - main
-    - fix-CI
+    - fix-CI  # Used to debug problems with CI and experiment with new features
     paths-ignore:
     - '**.md'
   pull_request:

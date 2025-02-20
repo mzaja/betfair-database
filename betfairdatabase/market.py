@@ -28,6 +28,23 @@ class Market:
     Holds the information about market catalogue and market data files.
 
     Improves performance by caching results of slow I/O or CPU-intensive operations.
+
+    Attributes:
+        - market_catalogue_file : Path to the market catalogue file for this market.
+        - sql_action : Tells the database what to do with the market when procesing it.
+                       It gets modified when the market is moved or copied, depending on
+                       the duplicate handling policy. Default value is INSERT.
+    Properties:
+        - market_data_file : Returns the path to the market data file for this market.
+                             Raises MarketDataFileError if the market data file does not exist.
+        - market_catalogue_data : Returns the parsed market catalogue data as a dict.
+        - racing : True if this is a horse or a greyhound racing market, else False.
+
+    Methods:
+        - create_sql_mapping : Transforms the parsed market catalogue data to a flat
+                               dictionary representation, suitable for SQL import.
+        - copy : Copies market catalogue and data files to the destination. Updates paths.
+        - move : Moves market catalogue and data files to the destination. Updates paths.
     """
 
     def __init__(self, market_catalogue_file: str | Path):
@@ -78,7 +95,8 @@ class Market:
     ) -> dict[str, Any]:
         """
         Returns a dictionary where keys are SQL table column names and
-        values are values in a row.
+        values are values in a row. Extra key-value pairs can be added
+        through additional_metadata argument.
 
         If no_paths is True, marketCatalogueFilePath and marketDataFilePath
         field values are set to None.
@@ -187,8 +205,9 @@ class Market:
         self, dest_dir: str | Path, copy: bool, on_duplicates: DuplicatePolicy
     ) -> Market:
         """
-        Returns a new Market object where the paths to market catalogue and
-        market data files have been updated as if the .
+        Moves the market catalogue and the market data file to the specified directory.
+        Returns a new Market object with the updated paths to market files. The paths
+        are updated regardless of whether the files were actually moved or copied.
         """
         # Determine output dir and destination file paths
         dest_dir = Path(dest_dir).resolve()

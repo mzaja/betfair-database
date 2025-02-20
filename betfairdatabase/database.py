@@ -71,7 +71,7 @@ class BetfairDatabase:
                 f"CREATE TABLE {SQL_TABLE_NAME}({','.join(SQL_TABLE_COLUMNS)}"
                 f", UNIQUE({','.join(SQL_TABLE_COLUMNS[-2:])}))"
             )
-            return self._handle_market_catalogues(self.database_dir, conn)
+            return self._handle_market_data(self.database_dir, conn)
 
     def insert(
         self,
@@ -102,7 +102,7 @@ class BetfairDatabase:
         if not self._index_file.exists():
             self.index()  # Make a database if it does not exist
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
-            return self._handle_market_catalogues(
+            return self._handle_market_data(
                 source_dir,
                 conn,
                 copy=copy,
@@ -218,7 +218,7 @@ class BetfairDatabase:
         """
         return Path(target_dir).rglob("1.*.json")
 
-    def _handle_market_catalogues(
+    def _handle_market_data(
         self,
         source_dir: str | Path,
         connection: sqlite3.Connection,
@@ -255,6 +255,8 @@ class BetfairDatabase:
                     dest_dir = self.database_dir / import_pattern(
                         market.market_catalogue_data
                     )
+                    # Move and copy are conditional on the duplicate handling policy
+                    # and set market.sql_action accordingly
                     market = (
                         market.copy(dest_dir, on_duplicates)
                         if copy
@@ -263,10 +265,7 @@ class BetfairDatabase:
                     if market.sql_action is SQLAction.SKIP:
                         continue
 
-                sql_data_map = market.create_sql_mapping(
-                    # Rejects non-racing markets
-                    self._racing_data_processor.get(market)
-                )
+                # This code block is only ever executed when updating the database
                 if market.sql_action is SQLAction.UPDATE:
                     # SQL does not support updating a whole row at a time and requires one to list
                     # individual fields and values to update. A simpler way to achieve the same
@@ -275,6 +274,12 @@ class BetfairDatabase:
                         f"DELETE FROM {SQL_TABLE_NAME}"
                         f" WHERE {MARKET_CATALOGUE_FILE_PATH} = '{market.market_catalogue_file}'"
                     )
+
+                # This section is always executed, for both updating and indexing
+                sql_data_map = market.create_sql_mapping(
+                    # Rejects non-racing markets
+                    self._racing_data_processor.get(market)
+                )
                 connection.execute(
                     f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",
                     tuple(sql_data_map.values()),

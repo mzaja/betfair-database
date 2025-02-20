@@ -125,4 +125,4 @@ class RacingDataProcessor:
                 # Unsuitable market catalogue
                 # Also raised by make_race_id() if race_id cannot be constructed
                 pass
-        return None
+        return None  # More efficient than creating an empty dict thousands of times

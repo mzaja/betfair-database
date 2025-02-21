@@ -30,6 +30,16 @@ from betfairdatabase.utils import ImportPatterns
 logger = logging.getLogger(__name__)
 
 
+def _is_debug_logging_enabled() -> bool:
+    """
+    Returns True if debug logging is enabled, else False.
+
+    Performance-wise, it is over 10x more efficient to check this once and
+    skip logging in-code than letting the logger check on every single call.
+    """
+    return (not logger.disabled) and (logger.getEffectiveLevel() <= logging.DEBUG)
+
+
 class BetfairDatabase:
     """
     Transforms a directory of captured Betfair market data into
@@ -60,6 +70,7 @@ class BetfairDatabase:
         if self._index_file.exists():
             if force:
                 self._index_file.unlink()
+                logger.info("Overwriting an existing index at '%s'.", self._index_file)
             else:
                 raise IndexExistsError(
                     self.database_dir,
@@ -71,7 +82,7 @@ class BetfairDatabase:
                 f"CREATE TABLE {SQL_TABLE_NAME}({','.join(SQL_TABLE_COLUMNS)}"
                 f", UNIQUE({','.join(SQL_TABLE_COLUMNS[-2:])}))"
             )
-            return self._handle_market_data(self.database_dir, conn)
+            return self._process_market_data(self.database_dir, conn)
 
     def insert(
         self,
@@ -102,7 +113,7 @@ class BetfairDatabase:
         if not self._index_file.exists():
             self.index()  # Make a database if it does not exist
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
-            return self._handle_market_data(
+            return self._process_market_data(
                 source_dir,
                 conn,
                 copy=copy,
@@ -176,11 +187,13 @@ class BetfairDatabase:
                 writer = csv.DictWriter(f, data[0].keys())
                 writer.writeheader()
                 writer.writerows(data)
+        logger.info("Exported %d rows to '%s'.", len(data), dest)
         return dest
 
-    def clean(self):
+    def clean(self) -> int:
         """
-        Deletes all database entries with a missing market data file.
+        Deletes all database entries with a missing market data file. Returns the
+        number of removed entries.
 
         This method reduces the need to reindex the database whenever the files are
         removed from it. However, reindexing can be faster if a large number of files
@@ -189,6 +202,10 @@ class BetfairDatabase:
         # Cannot process data if it has not been indexed
         if not self._index_file.exists():
             raise IndexMissingError(self.database_dir)
+
+        rows_deleted = 0
+        debug_logging_enabled = _is_debug_logging_enabled()
+
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
             # Iterate over table rows, test if market data file exists, mark files which don't
             cursor = conn.cursor()
@@ -203,10 +220,15 @@ class BetfairDatabase:
                         f"UPDATE {SQL_TABLE_NAME}"
                         f" SET {MARKET_DATA_FILE_PATH} = NULL WHERE {ROWID} = {row_id}"
                     )
+                    rows_deleted += 1
+                    if debug_logging_enabled:
+                        logger.debug("Removing '%s' from the database.", data_file_path)
             # Delete all marked rows
             conn.execute(
                 f"DELETE FROM {SQL_TABLE_NAME} WHERE {MARKET_DATA_FILE_PATH} IS NULL"
             )
+        logger.info("Removed %d entries from the database.", rows_deleted)
+        return rows_deleted
 
     ################# PRIVATE METHODS #######################
 
@@ -218,7 +240,7 @@ class BetfairDatabase:
         """
         return Path(target_dir).rglob("1.*.json")
 
-    def _handle_market_data(
+    def _process_market_data(
         self,
         source_dir: str | Path,
         connection: sqlite3.Connection,
@@ -239,19 +261,26 @@ class BetfairDatabase:
         rows_inserted = 0
         corrupt_markets = []
         markets = list(Market(mc) for mc in self._locate_market_catalogues(source_dir))
+        total_markets_count = len(markets)
+        markets_updated_count = 0
+        markets_skipped_count = 0
+        missing_data_files_count = 0
+        updating_existing_database = bool(import_pattern and on_duplicates)
+        debug_logging_enabled = _is_debug_logging_enabled()
+
         # Two-pass required, so cache generated Market objects in RAM
         for market in markets:
             try:
                 self._racing_data_processor.add(market)  # Rejects non-racing markets
             except JSONDecodeError:
-                logger.error(f"Error parsing '{market.market_catalogue_file}'.")
+                logger.error("Error parsing '%s'.", market.market_catalogue_file)
                 corrupt_markets.append(market)
         for market in corrupt_markets:
             markets.remove(market)
         for market in markets:
             try:
                 # Database is being updated
-                if import_pattern and on_duplicates:
+                if updating_existing_database:
                     dest_dir = self.database_dir / import_pattern(
                         market.market_catalogue_data
                     )
@@ -263,6 +292,9 @@ class BetfairDatabase:
                         else market.move(dest_dir, on_duplicates)
                     )
                     if market.sql_action is SQLAction.SKIP:
+                        markets_skipped_count += 1
+                        if debug_logging_enabled:
+                            logger.debug("Skipping '%s'.", market.market_data_file)
                         continue
 
                 # This code block is only ever executed when updating the database
@@ -274,6 +306,9 @@ class BetfairDatabase:
                         f"DELETE FROM {SQL_TABLE_NAME}"
                         f" WHERE {MARKET_CATALOGUE_FILE_PATH} = '{market.market_catalogue_file}'"
                     )
+                    markets_updated_count += 1
+                    if debug_logging_enabled:
+                        logger.debug("Updating '%s'.", market.market_data_file)
 
                 # This section is always executed, for both updating and indexing
                 sql_data_map = market.create_sql_mapping(
@@ -285,7 +320,24 @@ class BetfairDatabase:
                     tuple(sql_data_map.values()),
                 )
                 rows_inserted += 1
+                if debug_logging_enabled and (market.sql_action is SQLAction.INSERT):
+                    logger.debug("Adding '%s'.", market.market_data_file)
+
             except MarketDataFileError:
-                # Log warning that a data file is missing
-                pass
+                missing_data_files_count += 1
+                logger.error(
+                    "Missing market data file for catalogue '%s'",
+                    market.market_catalogue_file,
+                )
+        logger.info(
+            "Finished %s %d markets.",
+            "importing" if updating_existing_database else "indexing",
+            total_markets_count,
+        )
+        logger.info("Added: %d", rows_inserted - markets_updated_count)
+        if updating_existing_database:
+            logger.info("Updated: %d", markets_updated_count)
+            logger.info("Skipped: %d", markets_skipped_count)
+        logger.info("Corrupt: %d", len(corrupt_markets))
+        logger.info("Incomplete: %d", missing_data_files_count)
         return rows_inserted

@@ -1,5 +1,6 @@
 import importlib.metadata
 import inspect
+import logging
 import platform
 import subprocess
 import sys
@@ -14,6 +15,7 @@ from betfairdatabase.cli import (
     ON_DUPLICATES,
     get_parser,
     get_version,
+    logger,
     main,
 )
 from betfairdatabase.const import DuplicatePolicy
@@ -165,6 +167,7 @@ class TestCLI(unittest.TestCase):
     def test_parser(self):
         """Parser should return enough options to cover all API input parameters."""
         parser = get_parser()
+        generic_args_count = 2  # --version and --quiet apply to all sub-commands
         for cmd, method in [
             (["index", DATABASE_DIR], api.index),
             (["export", DATABASE_DIR, "dst"], api.export),
@@ -174,16 +177,57 @@ class TestCLI(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 args = parser.parse_args(cmd)
                 self.assertEqual(
-                    len(vars(args)) - 1,  # -1 because a sub-command is one arg
+                    # -1 because a sub-command is one arg
+                    len(vars(args)) - generic_args_count - 1,
                     len(inspect.signature(method).parameters),
                 )
 
-    def test_calling_module(self):
-        """Tests calling the module with the -m flag."""
+    def test_calling_module_with_version_flags(self):
+        """
+        Tests calling the module with the -m flag.
+        Also checks that the options for retrieving the version are valid.
+        These are effectively two separate tests rolled into one for convenience.
+        """
         # Unfortunately, this test does not increase code coverage
         python_exe = "python" + ("3" if platform.system() == "Linux" else "")
-        proc = subprocess.run(f"{python_exe} -m betfairdatabase --version", shell=True)
-        self.assertEqual(proc.returncode, 0)
+        for version_flag in ["--version", "-V"]:
+            with self.subTest(version_flag=version_flag):
+                proc = subprocess.run(
+                    f"{python_exe} -m betfairdatabase {version_flag}",
+                    shell=True,
+                    capture_output=True,
+                )
+                self.assertEqual(proc.returncode, 0)
+                self.assertEqual(proc.stdout.strip().decode(), get_version())
+
+    def test_logging(self):
+        """
+        Tests the control of logging levels by -q/--quiet and -v/--verbose
+        options and the formatter settings.
+        """
+        global logger
+        original_logger_level = logger.getEffectiveLevel()
+        original_logger_disabled = logger.disabled
+        try:
+            BASE_ARGS = ("clean", ".")
+            for option, logger_disabled, logger_level in [
+                ("", False, logging.INFO),
+                ("-v", False, logging.DEBUG),
+                ("--verbose", False, logging.DEBUG),
+                ("-q", True, logging.INFO),
+                ("--quiet", True, logging.INFO),
+            ]:
+                with self.subTest(
+                    option=option,
+                    logger_disabled=logger_disabled,
+                    logger_level=logger_level,
+                ):
+                    self.call_main_with_args(*([option] if option else []), *BASE_ARGS)
+                    self.assertIs(logger.disabled, logger_disabled)
+                    self.assertEqual(logger.getEffectiveLevel(), logger_level)
+        finally:
+            logger.setLevel(original_logger_level)
+            logger.disabled = original_logger_disabled
 
 
 @mock.patch("builtins.print")

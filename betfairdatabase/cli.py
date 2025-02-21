@@ -1,6 +1,8 @@
-from argparse import ArgumentParser
+import logging
+from argparse import ArgumentParser, Namespace
 
 from betfairdatabase import api
+from betfairdatabase.database import logger
 from betfairdatabase.exceptions import (
     DatabaseDirectoryError,
     IndexExistsError,
@@ -32,10 +34,22 @@ def get_parser() -> ArgumentParser:
         prog="bfdb", description="betfairdatabase command line app."
     )
     parser.add_argument(
-        "-v",
+        "-V",
         "--version",
         action="version",
         version=get_version(),
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Increase amount of displayed messages to debug level.",
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress printing to terminal, including error messages.",
     )
 
     subparsers = parser.add_subparsers(
@@ -118,10 +132,24 @@ def get_parser() -> ArgumentParser:
     return parser
 
 
+def setup_logging(args: Namespace) -> None:
+    """Configures the level of command line tool logging."""
+    logging_level = logging.INFO  # Default logging level
+    if args.verbose:
+        logging_level = logging.DEBUG
+    if args.quiet:
+        logger.disabled = True  # quiet overrides verbose
+    logger.setLevel(logging_level)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+
+
 def main():
     """Entry point for the command line app."""
     parser = get_parser()
     args = parser.parse_args()
+    setup_logging(args)
     try:
         match args.command:
             case "index":

@@ -90,9 +90,10 @@ def insert(
     )
 
 
-def clean(database_dir: str | Path):
+def clean(database_dir: str | Path) -> int:
     """
-    Deletes all database entries with a missing market data file.
+    Deletes all database entries with a missing market data file. Returns the
+    number of removed entries.
 
     This method reduces the need to reindex the database whenever the files are
     removed from it. However, reindexing can be faster if a large number of files

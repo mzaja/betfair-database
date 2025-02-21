@@ -82,9 +82,9 @@ class TestBetfairDatabase(unittest.TestCase):
                 self.assertNotEqual(row["marketId"], missing_data_file_market_id)
 
             # Error message were emitted for corrupt and missing data
-            error_messages = [
+            error_messages = sorted(
                 r.message for r in logs.records if r.levelno == logging.ERROR
-            ]
+            )
             self.assertEqual(len(error_messages), 2)
             # Corrupt file's name was logged
             message = error_messages[0]
@@ -123,9 +123,9 @@ class TestBetfairDatabase(unittest.TestCase):
                 database = BetfairDatabase(tmpdir)
                 database.index()
 
-                debug_messages = [
+                debug_messages = sorted(
                     r.message for r in logs.records if r.levelno == logging.DEBUG
-                ]
+                )
                 self.assertEqual(len(debug_messages), 4)
                 for message, data_file_name in zip(
                     debug_messages,
@@ -165,11 +165,15 @@ class TestBetfairDatabase(unittest.TestCase):
                     on_duplicates=DuplicatePolicy.SKIP,
                 )
 
-                debug_messages = [
+                debug_messages = sorted(
                     r.message for r in logs.records if r.levelno == logging.DEBUG
-                ]
+                )
                 self.assertEqual(len(debug_messages), 3)
-                for message, data_file_name in zip(debug_messages, DUPLICATE_FILES):
+                for message, data_file_name in zip(
+                    # "Skipping" comes after "Adding", so reshuffle the order of file names
+                    debug_messages,
+                    DUPLICATE_FILES[1:] + DUPLICATE_FILES[:1],
+                ):
                     self.assertTrue(
                         message.startswith(
                             "Skipping" if data_file_name.endswith(".zip") else "Adding"
@@ -202,9 +206,9 @@ class TestBetfairDatabase(unittest.TestCase):
                     pattern=ImportPatterns.flat,
                     on_duplicates=DuplicatePolicy.REPLACE,
                 )
-                debug_messages = [
+                debug_messages = sorted(
                     r.message for r in logs.records if r.levelno == logging.DEBUG
-                ]
+                )
                 self.assertEqual(len(debug_messages), 3)
                 for message, data_file_name in zip(debug_messages, DUPLICATE_FILES):
                     self.assertTrue(message.startswith("Updating"))
@@ -234,9 +238,9 @@ class TestBetfairDatabase(unittest.TestCase):
                     (database.database_dir / file).unlink()
                 database.clean()
 
-                debug_messages = [
+                debug_messages = sorted(
                     r.message for r in logs.records if r.levelno == logging.DEBUG
-                ]
+                )
                 self.assertEqual(len(debug_messages), 2)
                 for message, data_file_name in zip(debug_messages, removed_files):
                     self.assertTrue(message.startswith("Removing"))

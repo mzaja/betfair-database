@@ -109,10 +109,14 @@ class TestCLI(unittest.TestCase):
         """Tests "export" sub-command."""
         SUB_COMMAND = "export"
         DEST = "./my_dest"
-        # Without options
+        # With specifying dest
         self.call_main_with_args(
             SUB_COMMAND, DATABASE_DIR, DEST
         ).export.assert_called_once_with(DATABASE_DIR, DEST)
+        # Without specifying dest
+        self.call_main_with_args(
+            SUB_COMMAND, DATABASE_DIR
+        ).export.assert_called_once_with(DATABASE_DIR, ".")
 
     def test_import_patterns_valid(self):
         """

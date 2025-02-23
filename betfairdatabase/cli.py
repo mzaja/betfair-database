@@ -82,6 +82,9 @@ def get_parser() -> ArgumentParser:
     )
     parser_export.add_argument(
         "dest",
+        # required=False, # This does not work for positional arguments, sadly
+        nargs="?",  # Expect 0 or 1 value for this argument
+        default=".",
         help="Destination directory or file to which to export the database.",
     )
 

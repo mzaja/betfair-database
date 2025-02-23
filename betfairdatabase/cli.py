@@ -49,7 +49,10 @@ def get_parser() -> ArgumentParser:
         "-q",
         "--quiet",
         action="store_true",
-        help="Suppress printing to terminal, including error messages.",
+        help="Suppress printing to terminal, including error messages. Also hides progress bars.",
+    )
+    parser.add_argument(
+        "--no-progress-bar", action="store_true", help="Hides progress bars."
     )
 
     subparsers = parser.add_subparsers(
@@ -146,12 +149,16 @@ def get_parser() -> ArgumentParser:
 
 
 def setup_logging(args: Namespace) -> None:
-    """Configures the level of command line tool logging."""
+    """
+    Configures the level of command line tool logging.
+    Disables the progress bar if quiet mode is activated.
+    """
     logging_level = logging.INFO  # Default logging level
     if args.verbose:
         logging_level = logging.DEBUG
     if args.quiet:
         logger.disabled = True  # quiet overrides verbose
+        api.progress_bar(False)  # Disable progress bar
     logger.setLevel(logging_level)
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(message)s"))
@@ -184,6 +191,8 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
     setup_logging(args)
+    if args.no_progress_bar:
+        api.progress_bar(False)
     try:
         match args.command:
             case "index":

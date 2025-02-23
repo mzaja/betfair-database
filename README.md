@@ -112,6 +112,14 @@ import betfairdatabase as bfdb
 bfdb.clean("./my_betfair_data")
 ```
 
+### Checking database size
+To quickly check the number of indexed markets in the database, run:
+```py
+import betfairdatabase as bfdb
+
+bfdb.size("./my_betfair_data")
+```
+
 ### Object-oriented interface
 All of the above methods can also be accessed through OOP interface via `BetfairDatabase` class. This is useful when performing multiple operations on the same database as the database directory needs to be provided only once.
 ```py
@@ -123,6 +131,7 @@ db.select()
 db.insert("./my_capture_dir")
 db.export()
 db.clean()
+db.size()
 ```
 
 ### Command line interface
@@ -132,7 +141,13 @@ bfdb index "./my_database_dir"  # Index a database
 bfdb export "./my_database_dir" "./my_db_dump.csv" # Export a database
 bfdb insert "./my_database_dir" "./my_captured_data"  # Update the database
 bfdb clean "./my_database_dir"  # Clean the database
+bfdb size "./my_database_dir"  # Check database size
 ```
+
+The amount of displayed information is controlled with the following options:
+- `-v`/`--verbose`: Increases the amount of displayed messages. Useful for debugging.
+- `--no-progress-bar`: Hides progress bars. Useful when logging output to a file.
+- `-q`/`--quiet`: Suppress printing to terminal, including error messages. Also hides progress bars.
 
 For more information about the command line interface, run:
 ```bash

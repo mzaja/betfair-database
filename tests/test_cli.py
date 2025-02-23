@@ -205,7 +205,7 @@ class TestCLI(unittest.TestCase):
     def test_parser(self):
         """Parser should return enough options to cover all API input parameters."""
         parser = get_parser()
-        generic_args_count = 2  # --version and --quiet apply to all sub-commands
+        generic_args_count = 3  # --version, --quiet apply to all sub-commands
         for cmd, method in [
             (["index", DATABASE_DIR], api.index),
             (["export", DATABASE_DIR, "dst"], api.export),
@@ -242,7 +242,6 @@ class TestCLI(unittest.TestCase):
         original_logger_level = logger.getEffectiveLevel()
         original_logger_disabled = logger.disabled
         try:
-            BASE_ARGS = ("clean", ".")
             for option, logger_disabled, logger_level in [
                 ("", False, logging.INFO),
                 ("-v", False, logging.DEBUG),
@@ -255,12 +254,28 @@ class TestCLI(unittest.TestCase):
                     logger_disabled=logger_disabled,
                     logger_level=logger_level,
                 ):
-                    self.call_main_with_args(*([option] if option else []), *BASE_ARGS)
-                    self.assertIs(logger.disabled, logger_disabled)
+                    # Any command will do here - flags are the key
+                    mock_api = self.call_main_with_args(
+                        *([option] if option else []), "size", "."
+                    )
                     self.assertEqual(logger.getEffectiveLevel(), logger_level)
+                    self.assertIs(logger.disabled, logger_disabled)
+                    # Disabling logging should also disable the progress bar.
+                    # The opposite test cannot be performed because
+                    # api.progress_bar(True) call is not made explicitly,
+                    # given that the default is set to True and CLI use is one-shot.
+                    if logger_disabled:
+                        mock_api.progress_bar.assert_called_with(False)
         finally:
             logger.setLevel(original_logger_level)
             logger.disabled = original_logger_disabled
+
+    def test_disable_progress_bar(self):
+        """Tests disabling the progress bar via the --no-progress switch."""
+        mock_api = self.call_main_with_args("size", ".")
+        mock_api.progress_bar.assert_not_called()
+        mock_api = self.call_main_with_args("--no-progress-bar", "size", ".")
+        mock_api.progress_bar.assert_called_with(False)
 
 
 @mock.patch("builtins.print")

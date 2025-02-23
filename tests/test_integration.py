@@ -373,6 +373,17 @@ class TestIntegrationPart1(TestIntegrationBase):
                     for m1, m2 in zip(reader, markets):
                         self.assertEqual(m1, m2)
 
+    def test_size(self):
+        """Tests retrieving the size of the database."""
+        # Exception raised because no index exists yet
+        with self.assertRaises(IndexMissingError):
+            bfdb.size(self.test_data_dir)
+        # Checks that the size is correct
+        bfdb.index(self.test_data_dir)
+        size = bfdb.size(self.test_data_dir)
+        self.assertEqual(size, 9)  # Ensure the database is not empty
+        self.assertEqual(size, len(bfdb.select(self.test_data_dir)))
+
 
 class TestIntegrationPart2(TestIntegrationBase):
     """

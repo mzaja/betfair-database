@@ -129,6 +129,16 @@ def get_parser() -> ArgumentParser:
         help="Top-level directory of an indexed Betfair database.",
     )
 
+    # Sub-parser for size command
+    parser_clean = subparsers.add_parser(
+        "size",
+        description="Returns the number of indexed entries in the database.",
+    )
+    parser_clean.add_argument(
+        "database_dir",
+        help="Top-level directory of an indexed Betfair database.",
+    )
+
     return parser
 
 
@@ -145,8 +155,29 @@ def setup_logging(args: Namespace) -> None:
     logger.addHandler(handler)
 
 
+def handle_deprecated_version_flag():
+    """
+    Handles the use of deprecated '-v' flag for '--version',
+    which is now reassigned to stand for '--verbose'.
+    """
+    # Inspecting sys.argv is a bit messy, but the most
+    # practical option in this case
+    import sys
+
+    # If '-v' is invoked with a sub-command, it must mean '--verbose'.
+    # '--version' only makes sense when invoked alone
+    if (len(sys.argv) == 2) and (sys.argv[1] == "-v"):
+        print(get_version())
+        print(
+            "Using '-v' (lowercase) as a shorthand for '--version' is now deprecated. "
+            "Use '-V' (uppercase) instead. '-v' (lowercase) is now a shorthand for '--verbose'."
+        )
+        exit(0)
+
+
 def main():
     """Entry point for the command line app."""
+    handle_deprecated_version_flag()
     parser = get_parser()
     args = parser.parse_args()
     setup_logging(args)
@@ -175,6 +206,12 @@ def main():
             case "clean":
                 try:
                     api.clean(args.database_dir)
+                except IndexMissingError as ex:
+                    print(str(ex))
+                    exit(1)
+            case "size":
+                try:
+                    print(api.size(args.database_dir))
                 except IndexMissingError as ex:
                     print(str(ex))
                     exit(1)

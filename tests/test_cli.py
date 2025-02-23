@@ -1,3 +1,4 @@
+import contextlib
 import importlib.metadata
 import inspect
 import logging
@@ -5,6 +6,7 @@ import platform
 import subprocess
 import sys
 import unittest
+from io import StringIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import mock
@@ -49,7 +51,7 @@ class TestCLI(unittest.TestCase):
 
     @mock.patch("importlib.metadata.version")
     def test_get_version(self, mock_importlib_version: mock.Mock):
-        """Tests retrieving the app/package version."""
+        """Test the function for retrieving the app/package version."""
         VERSION = "x.y.z"
         mock_importlib_version.return_value = VERSION
         self.assertEqual(get_version(), VERSION)
@@ -61,6 +63,31 @@ class TestCLI(unittest.TestCase):
         mock_importlib_version.side_effect = importlib.metadata.PackageNotFoundError
         # Error should not be propagated but a placeholder value returned
         self.assertEqual(get_version(), "")
+
+    def test_version(self):
+        """Tests retrieving the version number."""
+        # Test normal arguments
+        for arg in ["--version", "-V"]:
+            stdout_buffer = StringIO()
+            with (
+                self.assertRaises(SystemExit) as ctx,
+                contextlib.redirect_stdout(stdout_buffer),
+            ):
+                self.call_main_with_args(arg)
+            self.assertEqual(ctx.exception.code, 0)
+            self.assertEqual(stdout_buffer.getvalue().strip(), get_version())
+
+        # Test deprecated argument
+        stdout_buffer = StringIO()
+        with (
+            self.assertRaises(SystemExit) as ctx,
+            contextlib.redirect_stdout(stdout_buffer),
+        ):
+            self.call_main_with_args("-v")
+        self.assertEqual(ctx.exception.code, 0)
+        version, message = stdout_buffer.getvalue().splitlines()
+        self.assertEqual(version, get_version())
+        self.assertIn("deprecated", message)
 
     def test_index_sub_command(self):
         """Tests "index" sub-command."""
@@ -164,6 +191,13 @@ class TestCLI(unittest.TestCase):
             SUB_COMMAND, DATABASE_DIR
         ).clean.assert_called_once_with(DATABASE_DIR)
 
+    def test_size_sub_command(self):
+        """Tests "size" sub-command."""
+        SUB_COMMAND = "size"
+        self.call_main_with_args(
+            SUB_COMMAND, DATABASE_DIR
+        ).size.assert_called_once_with(DATABASE_DIR)
+
     def test_parser(self):
         """Parser should return enough options to cover all API input parameters."""
         parser = get_parser()
@@ -173,6 +207,7 @@ class TestCLI(unittest.TestCase):
             (["export", DATABASE_DIR, "dst"], api.export),
             (["insert", DATABASE_DIR, "src"], api.insert),
             (["clean", DATABASE_DIR], api.clean),
+            (["size", DATABASE_DIR], api.size),
         ]:
             with self.subTest(cmd=cmd):
                 args = parser.parse_args(cmd)
@@ -182,23 +217,17 @@ class TestCLI(unittest.TestCase):
                     len(inspect.signature(method).parameters),
                 )
 
-    def test_calling_module_with_version_flags(self):
-        """
-        Tests calling the module with the -m flag.
-        Also checks that the options for retrieving the version are valid.
-        These are effectively two separate tests rolled into one for convenience.
-        """
+    def test_calling_module(self):
+        """Tests calling the module with 'python -m <module>'."""
         # Unfortunately, this test does not increase code coverage
         python_exe = "python" + ("3" if platform.system() == "Linux" else "")
-        for version_flag in ["--version", "-V"]:
-            with self.subTest(version_flag=version_flag):
-                proc = subprocess.run(
-                    f"{python_exe} -m betfairdatabase {version_flag}",
-                    shell=True,
-                    capture_output=True,
-                )
-                self.assertEqual(proc.returncode, 0)
-                self.assertEqual(proc.stdout.strip().decode(), get_version())
+        proc = subprocess.run(
+            f"{python_exe} -m betfairdatabase --version",
+            shell=True,
+            capture_output=True,
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout.strip().decode(), get_version())
 
     def test_logging(self):
         """
@@ -262,12 +291,14 @@ class TestErrorHandling(unittest.TestCase):
         """
         with TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir).resolve()
-            self.call_main_with_args("clean", str(tmpdir))
-            self.assertNotEqual(mock_exit.call_args[0][0], 0)
-            self.assertIn(
-                f"Betfair database index not found in '{tmpdir}'.",
-                mock_print.call_args[0][0],
-            )
+            for cmd in ["clean", "size"]:
+                with self.subTest(cmd=cmd):
+                    self.call_main_with_args(cmd, str(tmpdir))
+                    self.assertNotEqual(mock_exit.call_args[0][0], 0)
+                    self.assertIn(
+                        f"Betfair database index not found in '{tmpdir}'.",
+                        mock_print.call_args[0][0],
+                    )
 
     def test_index_exists_error(
         self, mock_exit: mock.MagicMock, mock_print: mock.MagicMock
@@ -300,6 +331,7 @@ class TestErrorHandling(unittest.TestCase):
             ("export", database_dir, "dst"),
             ("insert", database_dir, "src"),
             ("clean", database_dir),
+            ("size", database_dir),
         ]:
             with self.subTest(args=args):
                 self.call_main_with_args(*args)
@@ -322,6 +354,7 @@ class TestErrorHandling(unittest.TestCase):
                 ("export", database_dir, "dst"),
                 ("insert", database_dir, "src"),
                 ("clean", database_dir),
+                ("size", database_dir),
             ]:
                 with self.subTest(args=args):
                     self.call_main_with_args(*args)

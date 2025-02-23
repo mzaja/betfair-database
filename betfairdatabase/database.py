@@ -230,6 +230,13 @@ class BetfairDatabase:
         logger.info("Removed %d entries from the database.", rows_deleted)
         return rows_deleted
 
+    def size(self) -> int:
+        """Returns the number of indexed entries in the database."""
+        if not self._index_file.exists():
+            raise IndexMissingError(self.database_dir)
+        with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
+            return self._get_number_of_entries(conn)
+
     ################# PRIVATE METHODS #######################
 
     @staticmethod
@@ -239,6 +246,18 @@ class BetfairDatabase:
         target directory.
         """
         return Path(target_dir).rglob("1.*.json")
+
+    def _get_number_of_entries(self, connection: sqlite3.Connection) -> int:
+        """
+        Returns the number of rows in the database index.
+
+        This method is preferred over size() when an already open
+        connection exists because it does not carry the overhead
+        of opening and closing a database connection.
+        """
+        return connection.execute(f"SELECT COUNT(*) FROM {SQL_TABLE_NAME}").fetchone()[
+            0
+        ]
 
     def _process_market_data(
         self,

@@ -100,3 +100,8 @@ def clean(database_dir: str | Path) -> int:
     has been removed.
     """
     return BetfairDatabase(database_dir).clean()
+
+
+def size(database_dir: str | Path) -> int:
+    """Returns the number of indexed entries in the database."""
+    return BetfairDatabase(database_dir).size()

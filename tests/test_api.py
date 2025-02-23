@@ -5,7 +5,7 @@ from unittest import mock
 
 import betfairdatabase.api as api
 
-API_METHOD_NAMES = ("clean", "columns", "export", "index", "insert", "select")
+API_METHOD_NAMES = ("clean", "columns", "export", "index", "insert", "select", "size")
 
 
 class TestAPI(unittest.TestCase):
@@ -57,9 +57,10 @@ class TestAPI(unittest.TestCase):
         """
         DATABASE_DIR = "some_random_dir"
         DEFAULT_CALL_ARGS = (DATABASE_DIR, None)
-        CALL_ARGS = {"clean": (DATABASE_DIR,)}  # List non-default call args only
+        # List non-default call args only
+        CALL_ARGS = {"clean": (DATABASE_DIR,), "size": (DATABASE_DIR,)}
         # Test instance methods
-        for api_func_name in ("index", "select", "export", "insert", "clean"):
+        for api_func_name in ("index", "select", "export", "insert", "clean", "size"):
             with (
                 self.subTest(api_func=api_func_name),
                 mock.patch("betfairdatabase.api.BetfairDatabase") as mock_db_class,

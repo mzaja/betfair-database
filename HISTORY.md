@@ -10,7 +10,7 @@
 - Added `size` method which returns the number of indexed markets in the database.
 - Long running methods (`index`, `insert`, `clean` and `export`) display optional progress bars.
 - Python 3.13 support added.
-- ### Bug fixes
+### Bug fixes
 - In command line mode,`export` command defaults `dest` argument to the current working directory if not specified. This is in line with how the other APIs behave.
 
 ## 1.1.0 (2024-03-11)

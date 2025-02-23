@@ -13,7 +13,7 @@
 @REM Check history, commit, tag the release and push to remote
 @REM =========================================================
 @REM Set release version here:
-SET RELEASE_VERSION=1.1.0
+SET RELEASE_VERSION=1.2.0
 
 @REM Check that the distribution has been built already
 IF NOT EXIST "dist\betfairdatabase-%RELEASE_VERSION%-py3-none-any.whl" (
@@ -45,8 +45,9 @@ IF %ERRORLEVEL% NEQ 0 (
     ECHO pre-commit found errors and modified files!
     EXIT 1
 )
+
 @REM Stage and commit files, add tags and push
-git add .
+git add HISTORY.md pyproject.toml scripts\deploy.bat
 git commit -m "Prepare release %RELEASE_VERSION%"
 git tag v%RELEASE_VERSION%
 git push
@@ -54,3 +55,7 @@ git push --tags
 
 @REM Go to package repository and add a release manually
 START firefox https://github.com/mzaja/betfair-database/releases/new
+
+@REM Ask for confirmation before publishing the package to PyPI
+SET /P choice="Upload package to PyPI? (y/n) "
+IF %choice%==y ( python -m twine upload dist/* )

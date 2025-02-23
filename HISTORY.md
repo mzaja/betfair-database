@@ -1,5 +1,18 @@
 # Release History
 
+## 1.2.0 (2025-02-23)
+### Deprecations
+- Short command line option for retrieving the tool version has been changed from `-v` to `-V` (lowercase to uppecase). The lowercase version continues to be supported, but will be removed in the future.
+### Improvements
+- Logging statements added. Default logging level is `INFO` in command line mode and `WARNING` otherwise.
+- Added `-v` and `--verbose` command line switches for setting the logging level to `DEBUG`.
+- Added `-q` and `--quiet` command line switches for disabling the logging altogether.
+- Added `size` method which returns the number of indexed markets in the database.
+- Long running methods (`index`, `insert`, `clean` and `export`) display optional progress bars.
+- Python 3.13 support added.
+- ### Bug fixes
+- In command line mode,`export` command defaults `dest` argument to the current working directory if not specified. This is in line with how the other APIs behave.
+
 ## 1.1.0 (2024-03-11)
 ### Improvements
 - `DatabaseDirectoryError` is raised when a database directory is not a directory or it does not exist.

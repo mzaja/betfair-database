@@ -5,6 +5,8 @@ from unittest import mock
 
 import betfairdatabase.api as api
 
+# "progress_bar" is deliberately omitted because it is API-only and does not exist in
+# BetfairDatabase class (the class accepts it as a constructor arguments)
 API_METHOD_NAMES = ("clean", "columns", "export", "index", "insert", "select", "size")
 
 
@@ -52,25 +54,26 @@ class TestAPI(unittest.TestCase):
             self.assertEqual(api_params, oop_params)
 
     def test_delegated_calls(self):
-        """
-        API calls must be delegated to the correct BetfairDatabase's method.
-        """
+        """API calls must be delegated to the correct BetfairDatabase's method."""
         DATABASE_DIR = "some_random_dir"
+        # Most API methods expect the database name and the first argument, followed
+        # by at least one optional argument and up to one mandatory argument.
+        # Because the value of the second argument does not matter in this test,
+        # it is set to None
         DEFAULT_CALL_ARGS = (DATABASE_DIR, None)
-        # List non-default call args only
-        CALL_ARGS = {"clean": (DATABASE_DIR,), "size": (DATABASE_DIR,)}
-        # Test instance methods
-        for api_func_name in ("index", "select", "export", "insert", "clean", "size"):
+        CUSTOM_CALL_ARGS = {"clean": (DATABASE_DIR,), "size": (DATABASE_DIR,)}
+        functions_under_test = list(API_METHOD_NAMES)
+        functions_under_test.remove("columns")
+        for api_func_name in functions_under_test:
             with (
                 self.subTest(api_func=api_func_name),
                 mock.patch("betfairdatabase.api.BetfairDatabase") as mock_db_class,
             ):
-                mock_db_instance = mock.Mock()
-                mock_db_class.return_value = mock_db_instance
+                mock_db_class.return_value = mock_db_instance = mock.Mock()
                 getattr(api, api_func_name)(
-                    *CALL_ARGS.get(api_func_name, DEFAULT_CALL_ARGS)
+                    *CUSTOM_CALL_ARGS.get(api_func_name, DEFAULT_CALL_ARGS)
                 )
-                mock_db_class.assert_called_with(DATABASE_DIR)
+                mock_db_class.assert_called_with(DATABASE_DIR, mock.ANY)
                 getattr(mock_db_instance, api_func_name).assert_called()
 
         # Test class method
@@ -80,3 +83,26 @@ class TestAPI(unittest.TestCase):
         ):
             api.columns()
             mock_db_class.columns.assert_called_with()
+
+    def test_progress_bar_configuration(self):
+        """Tests configuring the progress bar at module-level API."""
+        DATABASE_DIR = "some_random_dir"
+        DEFAULT_CALL_ARGS = (DATABASE_DIR, None)
+        CUSTOM_CALL_ARGS = {"clean": (DATABASE_DIR,), "size": (DATABASE_DIR,)}
+        functions_under_test = list(API_METHOD_NAMES)
+        functions_under_test.remove("columns")
+        for progress_bar_enabled in [True, False]:
+            for api_func_name in functions_under_test:
+                with (
+                    self.subTest(
+                        api_func=api_func_name,
+                        progress_bar=progress_bar_enabled,
+                    ),
+                    mock.patch("betfairdatabase.api.BetfairDatabase") as mock_db_class,
+                ):
+                    mock_db_class.return_value = mock.Mock()
+                    api.progress_bar(progress_bar_enabled)
+                    getattr(api, api_func_name)(
+                        *CUSTOM_CALL_ARGS.get(api_func_name, DEFAULT_CALL_ARGS)
+                    )
+                    mock_db_class.assert_called_with(DATABASE_DIR, progress_bar_enabled)

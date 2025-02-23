@@ -5,6 +5,16 @@ from betfairdatabase.const import DuplicatePolicy
 from betfairdatabase.database import BetfairDatabase
 from betfairdatabase.utils import ImportPatterns
 
+# Use this global variable to turn the progress bar on or off
+# when using the top-level module interface
+_progress_bar_enabled: bool = True
+
+
+def progress_bar(enabled: bool) -> None:
+    """Enables or disables the progress bar for module-level API."""
+    global _progress_bar_enabled
+    _progress_bar_enabled = enabled
+
 
 def index(database_dir: str | Path, force: bool = False) -> int:
     """
@@ -14,7 +24,7 @@ def index(database_dir: str | Path, force: bool = False) -> int:
     Throws IndexExistsError if an index already exists. Use force=True to
     overwrite the existing index.
     """
-    return BetfairDatabase(database_dir).index(force)
+    return BetfairDatabase(database_dir, _progress_bar_enabled).index(force)
 
 
 def select(
@@ -38,7 +48,9 @@ def select(
     Returns:
         A list of dicts if return_dict=True, else a list of tuples.
     """
-    return BetfairDatabase(database_dir).select(columns, where, limit, return_dict)
+    return BetfairDatabase(database_dir, _progress_bar_enabled).select(
+        columns, where, limit, return_dict
+    )
 
 
 def columns() -> list:
@@ -57,7 +69,7 @@ def export(database_dir: str | Path, dest: str | Path = ".") -> Path:
     This can be very slow and resource-intensive for large databases.
     No optimisations, such as chunkifying read data, are performed.
     """
-    return BetfairDatabase(database_dir).export(dest)
+    return BetfairDatabase(database_dir, _progress_bar_enabled).export(dest)
 
 
 def insert(
@@ -85,7 +97,7 @@ def insert(
             which is reflected in the index, and the index is updated. Market data files are
             replaced if the incoming data file is larger than the existing one.
     """
-    return BetfairDatabase(database_dir).insert(
+    return BetfairDatabase(database_dir, _progress_bar_enabled).insert(
         source_dir, copy, pattern, on_duplicates
     )
 
@@ -99,9 +111,9 @@ def clean(database_dir: str | Path) -> int:
     removed from it. However, reindexing can be faster if a large number of files
     has been removed.
     """
-    return BetfairDatabase(database_dir).clean()
+    return BetfairDatabase(database_dir, _progress_bar_enabled).clean()
 
 
 def size(database_dir: str | Path) -> int:
     """Returns the number of indexed entries in the database."""
-    return BetfairDatabase(database_dir).size()
+    return BetfairDatabase(database_dir, _progress_bar_enabled).size()

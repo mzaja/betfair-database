@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from betfairdatabase import BetfairDatabase
 from betfairdatabase.const import DuplicatePolicy
@@ -256,3 +257,28 @@ class TestBetfairDatabase(unittest.TestCase):
                 # Test reindexing message
                 database.index(force=True)
                 self.assertIn("Overwriting an existing index", logs.records[0].message)
+
+    @mock.patch("betfairdatabase.database.tqdm")
+    def test_progress_bar(self, mock_tqdm: mock.MagicMock):
+        """Tests that enabling or disabling the progress bar works."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.create_test_dataset(tmpdir, flatten=True, compressed=True)
+            # tqdm must return the original iterable
+            mock_tqdm.side_effect = lambda iterable, *a, **k: iterable
+            for progress_bar_enabled in [True, False]:
+                database = BetfairDatabase(tmpdir, progress_bar_enabled)
+                for method_name, args in [
+                    ("index", [True]),  # force
+                    ("export", [tmpdir]),  # dest
+                    ("clean", []),
+                    ("insert", [tmpdir, True]),  # src, copy
+                ]:
+                    with self.subTest(
+                        method=method_name, progress_bar=progress_bar_enabled
+                    ):
+                        mock_tqdm.reset_mock()
+                        getattr(database, method_name)(*args)
+                        if progress_bar_enabled:
+                            mock_tqdm.assert_called()
+                        else:
+                            mock_tqdm.assert_not_called()

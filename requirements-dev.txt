@@ -1,4 +1,5 @@
 # Requirements for development
+-r requirements.txt
 black
 blacken-docs
 coverage

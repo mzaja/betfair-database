@@ -5,7 +5,9 @@ import os
 import sqlite3
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Callable, Iterable, Iterator, Literal
+
+from tqdm import tqdm
 
 from betfairdatabase.const import (
     INDEX_FILENAME,
@@ -46,7 +48,7 @@ class BetfairDatabase:
     a queryable SQL database.
     """
 
-    def __init__(self, database_dir: str | Path):
+    def __init__(self, database_dir: str | Path, progress_bar: bool = True):
         self.database_dir = Path(database_dir)
         if not self.database_dir.exists():
             # This is the most elegant place to raise this error
@@ -57,6 +59,7 @@ class BetfairDatabase:
             raise DatabaseDirectoryError(f"'{database_dir}' is not a directory.")
         self._index_file = self.database_dir / INDEX_FILENAME
         self._racing_data_processor = RacingDataProcessor()
+        self.progress_bar_enabled = progress_bar
 
     def index(self, force: bool = False) -> int:
         """
@@ -186,7 +189,7 @@ class BetfairDatabase:
             with open(dest, "w", newline="") as f:
                 writer = csv.DictWriter(f, data[0].keys())
                 writer.writeheader()
-                writer.writerows(data)
+                writer.writerows(self._progress_bar(data, "Exporting", unit="rows"))
         logger.info("Exported %d rows to '%s'.", len(data), dest)
         return dest
 
@@ -209,8 +212,12 @@ class BetfairDatabase:
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
             # Iterate over table rows, test if market data file exists, mark files which don't
             cursor = conn.cursor()
-            for row in conn.execute(
-                f"SELECT {ROWID}, {MARKET_DATA_FILE_PATH} FROM {SQL_TABLE_NAME}"
+            for row in self._progress_bar(
+                conn.execute(
+                    f"SELECT {ROWID}, {MARKET_DATA_FILE_PATH} FROM {SQL_TABLE_NAME}"
+                ),
+                "Cleaning",
+                total=self._get_number_of_entries(conn),
             ):
                 row_id, data_file_path = row
                 if not os.path.exists(
@@ -239,8 +246,23 @@ class BetfairDatabase:
 
     ################# PRIVATE METHODS #######################
 
+    def _progress_bar(
+        self,
+        iterable: Iterable,
+        name: str,
+        unit: str = "markets",
+        total: int | None = None,
+    ) -> Iterable:
+        """Applies the progress bar to the iterable."""
+        if not self.progress_bar_enabled:
+            return iterable
+        else:
+            if not unit.startswith(" "):
+                unit = " " + unit
+            return tqdm(iterable, desc=name, unit=unit, total=total)
+
     @staticmethod
-    def _locate_market_catalogues(target_dir: str | Path) -> list[Path]:
+    def _locate_market_catalogues(target_dir: str | Path) -> Iterator[Path]:
         """
         Returns a list of path to market catalogues found in the
         target directory.
@@ -277,18 +299,25 @@ class BetfairDatabase:
         copy, import_pattern and on_duplicates need to be provided when inserting data
         into the database, but should be omitted when indexing the database.
         """
+        # Initialise variables
         rows_inserted = 0
-        corrupt_markets = []
-        markets = list(Market(mc) for mc in self._locate_market_catalogues(source_dir))
-        total_markets_count = len(markets)
         markets_updated_count = 0
         markets_skipped_count = 0
         missing_data_files_count = 0
         updating_existing_database = bool(import_pattern and on_duplicates)
         debug_logging_enabled = _is_debug_logging_enabled()
+        corrupt_markets = []
+
+        markets = list(
+            self._progress_bar(
+                (Market(mc) for mc in self._locate_market_catalogues(source_dir)),
+                "Locating markets",
+            )
+        )
+        total_markets_count = len(markets)
 
         # Two-pass required, so cache generated Market objects in RAM
-        for market in markets:
+        for market in self._progress_bar(markets, "Processing markets"):
             try:
                 self._racing_data_processor.add(market)  # Rejects non-racing markets
             except JSONDecodeError:
@@ -296,7 +325,7 @@ class BetfairDatabase:
                 corrupt_markets.append(market)
         for market in corrupt_markets:
             markets.remove(market)
-        for market in markets:
+        for market in self._progress_bar(markets, "Importing markets"):
             try:
                 # Database is being updated
                 if updating_existing_database:

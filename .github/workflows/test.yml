@@ -6,6 +6,7 @@ on:
     - main
     paths-ignore:
     - '**.md'
+    - 'samples/**'
   pull_request:
     branches:
     - main

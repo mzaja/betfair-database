@@ -1,5 +1,12 @@
 from enum import Enum
 
+# ---------------------------------------------------------------------------
+# CONSTANTS
+# ---------------------------------------------------------------------------
+# Generic
+ENCODING_UTF_8 = "utf-8"
+
+# SQL
 INDEX_FILENAME = ".betfairdatabaseindex"
 DATA_FILE_SUFFIXES = ("", ".zip", ".gz", ".bz2")
 SQL_TABLE_NAME = "BetfairDatabaseIndex"
@@ -45,6 +52,9 @@ SQL_TABLE_COLUMNS = (
 )
 
 
+# ---------------------------------------------------------------------------
+# ENUMS
+# ---------------------------------------------------------------------------
 class DuplicatePolicy(Enum):
     """
     Policy for handling duplicates when inserting data into an existing database.
@@ -63,9 +73,7 @@ class DuplicatePolicy(Enum):
 
 
 class SQLAction(Enum):
-    """
-    Specifies the SQL action to perform on a Market object.
-    """
+    """Specifies the SQL action to perform on a Market object."""
 
     INSERT = "INSERT"
     SKIP = "SKIP"

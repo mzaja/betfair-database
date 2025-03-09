@@ -1,6 +1,7 @@
 import unittest
 from unittest import mock
 
+from betfairdatabase.const import ENCODING_UTF_8
 from betfairdatabase.market import Market
 
 MOCK_CTG_FILENAME = "1.22334455.json"
@@ -17,7 +18,7 @@ class TestMarket(unittest.TestCase):
         """Market catalogues files are decoded as UTF-8."""
         market = Market(MOCK_CTG_FILENAME)
         market.market_catalogue_data  # Trigger parsing
-        mock_open.assert_called_with(mock.ANY, encoding="utf-8")
+        mock_open.assert_called_with(mock.ANY, encoding=ENCODING_UTF_8)
 
     @mock.patch("json.load")
     @mock.patch("builtins.open")

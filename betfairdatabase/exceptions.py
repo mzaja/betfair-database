@@ -1,3 +1,6 @@
+from pathlib import Path
+
+
 class BetfairDatabaseError(Exception):
     """Base exception for betfairdatabase module."""
 
@@ -38,4 +41,17 @@ class MarketDataFileError(BetfairDatabaseError):
     """
 
     def __init__(self, msg: str):
+        super().__init__(msg)
+
+
+class MarketDefinitionMissingError(BetfairDatabaseError):
+    """
+    Raised when the market definition index is missing in the target directory.
+    """
+
+    def __init__(self, market_data_file: str | Path):
+        msg = (
+            "Market definition was not found in neither the "
+            f"first nor the last line of '{market_data_file}'."
+        )
         super().__init__(msg)

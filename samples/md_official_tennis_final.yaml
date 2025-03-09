@@ -1,0 +1,50 @@
+# Final market definition of a tennis market. Differences between the initial
+# definition are noted. Dynamic fields such as "inPlay" or "status" are ignored.
+{
+    "id": "1.223716981",
+    "marketDefinition": {
+        "bspMarket": false,
+        "turnInPlayEnabled": true,
+        "persistenceEnabled": true,
+        "marketBaseRate": 5.0,
+        "eventId": "32948895",
+        "eventTypeId": "2",
+        "numberOfWinners": 1,
+        "bettingType": "ODDS",
+        "marketType": "SET_WINNER",
+        "marketTime": "2024-01-20T06:20:00.000Z",  # Changed
+        "suspendTime": "2024-01-20T06:20:00.000Z",  # Changed
+        "bspReconciled": false,
+        "complete": true,
+        "inPlay": true,
+        "crossMatching": false,
+        "runnersVoidable": false,
+        "numberOfActiveRunners": 0,
+        "betDelay": 3,
+        "status": "CLOSED",
+        "settledTime": "2024-01-20T09:17:31.000Z",  # Field added
+        "runners": [
+            {
+                "status": "WINNER",
+                "sortPriority": 1,
+                "id": 42669524,
+                "name": "Cameron Norrie"
+            },
+            {
+                "status": "LOSER",
+                "sortPriority": 2,
+                "id": 9629711,
+                "name": "Casper Ruud"
+            }
+        ],
+        "regulators": [
+            "MR_INT"
+        ],
+        "discountAllowed": true,
+        "timezone": "UTC",  # Changed
+        "openDate": "2024-01-20T06:20:00.000Z",  # Changed
+        "version": 5687310227,
+        "name": "Set 4 Winner",
+        "eventName": "Norrie v Ruud"  # Changed
+    }
+}

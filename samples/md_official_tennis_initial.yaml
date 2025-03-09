@@ -1,0 +1,50 @@
+# Initial market definition of a tennis market.
+
+{
+    "id": "1.223716981",
+    "marketDefinition": {
+        "bspMarket": false,
+        "turnInPlayEnabled": true,
+        "persistenceEnabled": true,
+        "marketBaseRate": 5.0,
+        "eventId": "32948895",
+        "eventTypeId": "2",
+        "numberOfWinners": 1,
+        "bettingType": "ODDS",
+        "marketType": "SET_WINNER",
+        "marketTime": "2024-01-19T00:00:00.000Z",
+        "suspendTime": "2024-01-19T00:00:00.000Z",
+        "bspReconciled": false,
+        "complete": true,
+        "inPlay": false,
+        "crossMatching": false,
+        "runnersVoidable": false,
+        "numberOfActiveRunners": 2,
+        "betDelay": 0,
+        "status": "OPEN",
+
+        "runners": [
+            {
+                "status": "ACTIVE",
+                "sortPriority": 1,
+                "id": 42669524,
+                "name": "Cameron Norrie"
+            },
+            {
+                "status": "ACTIVE",
+                "sortPriority": 2,
+                "id": 9629711,
+                "name": "Casper Ruud"
+            }
+        ],
+        "regulators": [
+            "MR_INT"
+        ],
+        "discountAllowed": true,
+        "timezone": "Europe/London",
+        "openDate": "2024-01-19T00:00:00.000Z",
+        "version": 5684686128,
+        "name": "Set 4 Winner",
+        "eventName": "Cameron Norrie v Casper Ruud"
+    }
+}

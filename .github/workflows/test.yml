@@ -11,6 +11,7 @@ on:
     - main
     paths-ignore:
     - '**.md'
+    - 'samples/**'
 
 jobs:
   test:

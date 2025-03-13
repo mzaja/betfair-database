@@ -1,10 +1,10 @@
 import datetime as dt
 import json
+from bz2 import BZ2File
+from io import BufferedReader
 from os import SEEK_CUR, SEEK_END, SEEK_SET
 from pathlib import Path
 from zoneinfo import ZoneInfo
-
-from smart_open import open
 
 from betfairdatabase.const import ENCODING_UTF_8
 from betfairdatabase.exceptions import MarketDefinitionMissingError
@@ -15,6 +15,9 @@ from betfairdatabase.exceptions import MarketDefinitionMissingError
 MARKET_DEFINITION = "marketDefinition"
 MARKET_DEFINITION_BYTES = MARKET_DEFINITION.encode()
 JSON_SEPARATORS = (",", ":")  # Eliminate unnecessary whitespace
+REVERSE_READ_STEP = 64 * 1024  # Characters to start reading a file from reverse
+# Store supported decompressors in this dict
+DECOMPRESSORS = {".bz2": BZ2File}
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +39,58 @@ def parse_datetime(datetime_str: str) -> dt.datetime:
         )
 
 
+def read_last_line_in_a_text_file(file_reader: BufferedReader) -> bytes:
+    """
+    Reads the last line in a text file by jumping to the end of the file and
+    moving backwards in steps of 64 KiB. This size should be sufficient to immediately
+    locate the last line in the vast majority of Betfair stream files. However, in
+    exceptional cases where this is not sufficient, the window keeps moving backwards
+    until the beginning of the line is found.
+
+    The function does not work on compressed files because they cannot be incrementally
+    decompressed from the rear. f.seek() in compressed files only works by sequentially
+    decompressing the file up until that point, defeating the prupose of jumping to the
+    back. For compressed files, it is faster and cleaner to simply decompress the whole
+    file and read the lines in reverse.
+    """
+    buffer = b""
+    file_reader.seek(0, SEEK_END)  # Go to the end of the file
+    while True:
+        bytes_from_beginning = file_reader.tell()
+        if bytes_from_beginning > REVERSE_READ_STEP:
+            read_step = REVERSE_READ_STEP
+            whole_file = False
+        else:
+            read_step = bytes_from_beginning
+            whole_file = True
+        # Move back by the step size, then read that many bytes
+        file_reader.seek(-read_step, SEEK_CUR)
+        buffer = file_reader.read(read_step) + buffer
+        try:
+            # If a newline is detected in the buffer, select and return the last line.
+            # Ignore the last element in the buffer search in case it is a newline.
+            return buffer[buffer[:-1].rindex(b"\n") + 1 :]
+        except ValueError:
+            # End up here whenever a newline is not found in the buffer.
+            if whole_file:
+                return buffer
+        # Roll back the head to undo the last read
+        file_reader.seek(-read_step, SEEK_CUR)
+
+
+def _find_last_market_definition_line(file_reader: BufferedReader | BZ2File) -> bytes:
+    """
+    Finds the last market definition in a file by reading it wholly and iterating
+    backwards from the end of the file until the market definition is encountered.
+
+    Raises MarketDefinitionMissingError if the market definition is not found.
+    """
+    for line in reversed(file_reader.readlines()):
+        if MARKET_DEFINITION_BYTES in line:
+            return line
+    raise MarketDefinitionMissingError(file_reader.name)
+
+
 def get_market_definition(market_data_file: Path) -> dict:
     """
     Reads a market data file and parses the market definition.
@@ -44,32 +99,20 @@ def get_market_definition(market_data_file: Path) -> dict:
     Market id, ordinarily a part of market change ("mc") message but not the market
     definition, is injected into the output data.
 
-    The market definition is expected to be present either in the last (preferrable)
-    or the first line of the file. If market definition cannot be found on these two
-    lines, MarketDefinitionMissingError is raised.
+    Raises MarketDefinitionMissingError if the market definition is not found.
     """
-    # Using smart-open, so streams are decompressed on-the-fly
-    with open(market_data_file, "rb") as f:
-        # Try reading the last line first, because the final market definition
-        # contains the most up-to-date data
-        try:
-            # Go 2 bytes from the end because the last one might be \n,
-            # in which case this algorithm would exit prematurely
-            f.seek(-2, SEEK_END)
-            # One step forward, two steps back until a newline is read
-            while f.read(1) != b"\n":
-                f.seek(-2, SEEK_CUR)
-        except OSError:
-            # Reached the beginning of the file -> this is the only line
-            f.seek(SEEK_SET)
-        line = f.readline()  # Read the line from the current cursor position
-
-        # If the last line does not contain a market definition, get the first line
-        if MARKET_DEFINITION_BYTES not in line:
-            f.seek(SEEK_SET)  # Go to the beginning
-            line = f.readline()
+    decompressor = DECOMPRESSORS.get(market_data_file.suffix, None)
+    if decompressor is not None:
+        with decompressor(market_data_file) as f:
+            line = _find_last_market_definition_line(f)
+    else:
+        # With plaintext files, try the shortcut of reading the last line first.
+        # If that does not locate the market definition, read and search the whole file.
+        with open(market_data_file, "rb") as f:
+            line = read_last_line_in_a_text_file(f)
             if MARKET_DEFINITION_BYTES not in line:
-                raise MarketDefinitionMissingError(market_data_file)
+                f.seek(0, SEEK_SET)  # Move back to the beginning of the file
+                line = _find_last_market_definition_line(f)
 
     # Parse data, inject market ID and return the correct dict sub-class
     market_change_message = json.loads(line)["mc"][0]
@@ -78,16 +121,19 @@ def get_market_definition(market_data_file: Path) -> dict:
     return market_definition
 
 
-def create_market_definition_file(market_data_file: Path) -> Path:
+def create_market_definition_file(
+    market_data_file: Path, overwrite: bool = False
+) -> Path:
     """
     Creates a market definition file from the market data file and
     stores it in the same directory as <market_id>.json.
     Returns the path to the generated market definition file.
 
-    Processing is skipped altogether if a file with the same name already exists.
+    Processing is skipped altogether if a file with the same name already exists,
+    unless overwrite=True is provided.
     """
     output_file = market_data_file.with_suffix(".json")
-    if not output_file.exists():
+    if overwrite or not output_file.exists():
         output_file.write_text(
             json.dumps(
                 get_market_definition(market_data_file), separators=JSON_SEPARATORS

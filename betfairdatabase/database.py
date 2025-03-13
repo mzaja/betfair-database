@@ -3,13 +3,15 @@ import csv
 import logging
 import os
 import sqlite3
+from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Callable, Iterable, Iterator, Literal
+from typing import Callable, Iterable, Literal
 
 from tqdm import tqdm
 
 from betfairdatabase.const import (
+    DATA_FILE_SUFFIXES,
     INDEX_FILENAME,
     MARKET_CATALOGUE_FILE_PATH,
     MARKET_DATA_FILE_PATH,
@@ -23,12 +25,15 @@ from betfairdatabase.exceptions import (
     DatabaseDirectoryError,
     IndexExistsError,
     IndexMissingError,
-    MarketDataFileError,
+    MarketDefinitionMissingError,
 )
 from betfairdatabase.market import Market
 from betfairdatabase.racing import RacingDataProcessor
-from betfairdatabase.utils import ImportPatterns
+from betfairdatabase.utils import ImportPatterns, create_market_definition_file
 
+# ---------------------------------------------------------------------------
+# LOGGING
+# ---------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 
 
@@ -42,13 +47,304 @@ def _is_debug_logging_enabled() -> bool:
     return (not logger.disabled) and (logger.getEffectiveLevel() <= logging.DEBUG)
 
 
-class BetfairDatabase:
+# ---------------------------------------------------------------------------
+# HELPER CLASSES
+# ---------------------------------------------------------------------------
+@dataclass(slots=True)
+class Counters:
+    """
+    Stores counters for various operations of the market file processor.
+    Used to display import statistics.
+    """
+
+    total_markets: int = 0
+    markets_without_data: int = 0
+    markets_without_metadata: int = 0
+    corrupt_files: int = 0
+    rows_inserted: int = 0
+    markets_updated: int = 0
+    markets_skipped: int = 0
+
+    @property
+    def markets_added(self) -> int:
+        """Returns the number of added markets."""
+        return self.rows_inserted - self.markets_updated
+
+    def log_info(self, action: Literal["indexing", "importing"]) -> None:
+        """Logs the counters as INFO messages."""
+        logger.info("Finished %s %d markets.", action, self.total_markets)
+        logger.info("Added: %d", self.markets_added)
+        if action == "importing":
+            logger.info("Updated: %d", self.markets_updated)
+            logger.info("Skipped: %d", self.markets_skipped)
+        logger.info("Corrupt: %d", self.corrupt_files)
+        logger.info("No data: %d", self.markets_without_data)
+        logger.info("No metadata: %d", self.markets_without_metadata)
+        if not self.validate():
+            logger.error("Counters do not add up.")
+
+    def validate(self) -> bool:
+        """
+        Performs a sanity check on the contents to ensure that the sum of components
+        matches the total. Returns True if the checks passes, else False.
+        """
+        return self.total_markets == (
+            self.rows_inserted
+            + self.markets_skipped
+            + self.corrupt_files
+            + self.markets_without_data
+            + self.markets_without_metadata
+        )
+
+
+class ProgressBarMixin:
+    """Progress bar mixin class."""
+
+    def __init__(self, progress_bar_enabled: bool):
+        self.progress_bar_enabled = progress_bar_enabled
+
+    # This is a private method because it is not supposed to be a part
+    # of the public API. It is only used internally by the class.
+    def _progress_bar(
+        self,
+        iterable: Iterable,
+        name: str,
+        unit: str = "markets",
+        total: int | None = None,
+    ) -> Iterable:
+        """Applies the progress bar to the iterable."""
+        if not self.progress_bar_enabled:
+            return iterable
+        else:
+            if not unit.startswith(" "):
+                unit = " " + unit
+            return tqdm(iterable, desc=name, unit=unit, total=total)
+
+
+class MarketFileProcessor(ProgressBarMixin):
+    """
+    Processes market data and metadata files (market catalogues and market definitions).
+    Two public methods are provided:
+        - index_database(): Indexes a directory containing market data and metadata files.
+        - update_database(): Inserts files from the source directory into the existing database.
+
+    This class is a refactor of the now-removed BetfairDatabase._process_market_data() method,
+    which had grown too big and complex to maintain. The class splits the code sections
+    of that method into smaller, more manageable methods.
+    """
+
+    def __init__(
+        self,
+        database_dir: str | Path,
+        progress_bar: bool = True,
+    ):
+        super().__init__(progress_bar)
+        self.database_dir = Path(database_dir)
+        self.counters = Counters()
+        self.racing_data_processor = RacingDataProcessor()
+        self.debug_logging_enabled = _is_debug_logging_enabled()
+        # Initialise file caches
+        self.metadata_files = {}  # Market catalogues or market definitions
+        self.data_files = {}  # Stream files
+
+    def index_database(self, connection: sqlite3.Connection) -> int:
+        """
+        Indexes the database by processing market data and metadata files.
+        Returns the number of indexed markets.
+        """
+        # Locate files for processing
+        self._locate_data_and_metadata_files(self.database_dir)
+        self.counters.total_markets = len(
+            set(self.data_files) | set(self.metadata_files)
+        )
+        # Process files without siblings
+        self._remove_metadata_files_without_data()
+        self._create_missing_metadata_files()
+
+        # Process and import markets
+        importable_markets = self._process_market_metadata_files()
+        self._import_markets_into_database(importable_markets, connection)
+        self.counters.log_info("indexing")
+        return self.counters.rows_inserted
+
+    def update_database(
+        self,
+        source_dir: str | Path,
+        connection: sqlite3.Connection,
+        copy: bool = False,
+        import_pattern: Callable[[dict], str] | None = None,
+        on_duplicates: DuplicatePolicy | None = None,
+    ) -> int:
+        """
+        Inserts the market data and metadata files from source_dir into the existing database.
+        Returns the number of inserted markets.
+        """
+        # Locate files for processing
+        self._locate_data_and_metadata_files(Path(source_dir))
+        self.counters.total_markets = len(
+            set(self.data_files) | set(self.metadata_files)
+        )
+        # Process files without siblings
+        self._remove_metadata_files_without_data()
+        self._create_missing_metadata_files()
+
+        # Process and import markets
+        importable_markets = self._process_market_metadata_files()
+        self._import_markets_into_database(
+            importable_markets, connection, copy, import_pattern, on_duplicates
+        )
+        self.counters.log_info("importing")
+        return self.counters.rows_inserted
+
+    def _locate_data_and_metadata_files(self, source_dir: Path | None) -> None:
+        """
+        Locates market data and metadata files in the source directory,
+        linking them using a common dictionary key.
+
+        Sets attributes: self.metadata_files, self.data_files.
+        """
+        data_file_suffixes = list(DATA_FILE_SUFFIXES)
+        data_file_suffixes.remove("")
+        for p in self._progress_bar(source_dir.rglob("1.*"), "Locating markets"):
+            # Metadata files always have a .json extension
+            if p.suffix == ".json":
+                self.metadata_files[p.with_suffix("")] = p
+            # Compressed data files
+            elif p.suffix in data_file_suffixes:
+                self.data_files[p.with_suffix("")] = p
+            # Uncompressed data files do not have an extension, but
+            # the numbers following 1. are treated as one.
+            elif len(p.suffix) > 8:  # Market data files usually have 9 "decimal places"
+                self.data_files[p] = p
+
+    def _remove_metadata_files_without_data(self) -> None:
+        """Removes metadata files without a corresponding data file from the cache."""
+        metadata_files_without_data = {
+            k: p for k, p in self.metadata_files.items() if k not in self.data_files
+        }
+        self.counters.markets_without_data = len(metadata_files_without_data)
+
+        if metadata_files_without_data:
+            logger.error(
+                "Missing market data file for metadata files: %s",
+                [f"'{p}'" for p in metadata_files_without_data.values()],
+            )
+            for key in metadata_files_without_data:
+                # Delete all metadata files without a corresponding data file
+                del self.metadata_files[key]
+
+    def _create_missing_metadata_files(self) -> None:
+        """Creates missing metadata files for data files missing them."""
+        data_files_without_metadata = {
+            k: p for k, p in self.data_files.items() if k not in self.metadata_files
+        }
+        for key, data_file in self._progress_bar(
+            data_files_without_metadata.items(), "Creating metadata files"
+        ):
+            try:
+                metadata_file = create_market_definition_file(data_file)
+                # Add the generated metadata file to registry
+                self.metadata_files[key] = metadata_file
+                if self.debug_logging_enabled:
+                    logger.debug("Created metadata file for '%s'.", data_file)
+            except MarketDefinitionMissingError:
+                self.counters.markets_without_metadata += 1
+                logger.error("Market definition missing in '%s'.", data_file)
+            except JSONDecodeError:
+                self.counters.corrupt_files += 1
+                logger.error("Error parsing '%s'.", data_file)
+
+    def _process_market_metadata_files(self) -> list[Market]:
+        """
+        Parses market metadata files, extract and injects additional metadata,
+        returns a list of importable Market objects (with valid metadata).
+        """
+        importable_markets = []
+        markets_gen = (
+            Market(v, self.data_files[k]) for k, v in self.metadata_files.items()
+        )
+        for market in self._progress_bar(
+            markets_gen, "Processing markets", total=len(self.metadata_files)
+        ):
+            try:
+                # Racing data processor triggers the parsing of the market catalogue
+                # because it needs to check whether this is a racing market.
+                # Non-racing markets are ignored by the racing data processor.
+                self.racing_data_processor.add(market)
+                # No error parsing the market catalogue
+                importable_markets.append(market)
+            except JSONDecodeError:
+                self.counters.corrupt_files += 1
+                logger.error("Error parsing '%s'.", market.market_metadata_file)
+        return importable_markets
+
+    def _import_markets_into_database(
+        self,
+        importable_markets: list[Market],
+        connection: sqlite3.Connection,
+        copy: bool = False,
+        import_pattern: Callable[[dict], str] | None = None,
+        on_duplicates: DuplicatePolicy | None = None,
+    ) -> None:
+        """
+        Imports the markets with valid metadata into the database.
+        Returns the number of inserted SQL table rows.
+        """
+        update_existing_database = bool(import_pattern and on_duplicates)
+
+        for market in self._progress_bar(importable_markets, "Importing markets"):
+            # Database is being updated
+            if update_existing_database:
+                dest_dir = self.database_dir / import_pattern(market.metadata)
+                # Move and copy are conditional on the duplicate handling policy
+                # and set market.sql_action accordingly
+                market = (
+                    market.copy(dest_dir, on_duplicates)
+                    if copy
+                    else market.move(dest_dir, on_duplicates)
+                )
+                if market.sql_action is SQLAction.SKIP:
+                    self.counters.markets_skipped += 1
+                    if self.debug_logging_enabled:
+                        logger.debug("Skipping '%s'.", market.market_data_file)
+                    continue
+                elif market.sql_action is SQLAction.UPDATE:
+                    # SQL does not support updating a whole row at a time and requires one to list
+                    # individual fields and values to update. A simpler way to achieve the same
+                    # outcome is to delete and re-insert the row.
+                    connection.execute(
+                        f"DELETE FROM {SQL_TABLE_NAME}"
+                        f" WHERE {MARKET_CATALOGUE_FILE_PATH} = '{market.market_metadata_file}'"
+                    )
+                    self.counters.markets_updated += 1
+                    if self.debug_logging_enabled:
+                        logger.debug("Updating '%s'.", market.market_data_file)
+
+            # This section is always executed, for both updating and indexing
+            sql_data_map = market.create_sql_mapping(
+                # Rejects non-racing markets
+                self.racing_data_processor.get(market)
+            )
+            connection.execute(
+                f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",
+                tuple(sql_data_map.values()),
+            )
+            self.counters.rows_inserted += 1
+            if self.debug_logging_enabled and (market.sql_action is SQLAction.INSERT):
+                logger.debug("Adding '%s'.", market.market_data_file)
+
+
+# ---------------------------------------------------------------------------
+# MAIN CLASS
+# ---------------------------------------------------------------------------
+class BetfairDatabase(ProgressBarMixin):
     """
     Transforms a directory of captured Betfair market data into
     a queryable SQL database.
     """
 
     def __init__(self, database_dir: str | Path, progress_bar: bool = True):
+        super().__init__(progress_bar)
         self.database_dir = Path(database_dir)
         if not self.database_dir.exists():
             # This is the most elegant place to raise this error
@@ -59,7 +355,6 @@ class BetfairDatabase:
             raise DatabaseDirectoryError(f"'{database_dir}' is not a directory.")
         self._index_file = self.database_dir / INDEX_FILENAME
         self._racing_data_processor = RacingDataProcessor()
-        self.progress_bar_enabled = progress_bar
 
     def index(self, force: bool = False) -> int:
         """
@@ -80,12 +375,13 @@ class BetfairDatabase:
                     " Use force=True option to reindex the database.",
                 )
         # Construct index
+        processor = MarketFileProcessor(self.database_dir, self.progress_bar_enabled)
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
             conn.execute(
                 f"CREATE TABLE {SQL_TABLE_NAME}({','.join(SQL_TABLE_COLUMNS)}"
                 f", UNIQUE({','.join(SQL_TABLE_COLUMNS[-2:])}))"
             )
-            return self._process_market_data(self.database_dir, conn)
+            return processor.index_database(conn)
 
     def insert(
         self,
@@ -112,16 +408,16 @@ class BetfairDatabase:
                 which is reflected in the index, and the index is updated. Market data files are
                 replaced if the incoming data file is larger than the existing one.
         """
-        duplicate_policy = DuplicatePolicy(on_duplicates)
         if not self._index_file.exists():
             self.index()  # Make a database if it does not exist
+        processor = MarketFileProcessor(self.database_dir, self.progress_bar_enabled)
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
-            return self._process_market_data(
+            return processor.update_database(
                 source_dir,
                 conn,
                 copy=copy,
                 import_pattern=pattern,
-                on_duplicates=duplicate_policy,
+                on_duplicates=DuplicatePolicy(on_duplicates),
             )
 
     def select(
@@ -246,29 +542,6 @@ class BetfairDatabase:
 
     ################# PRIVATE METHODS #######################
 
-    def _progress_bar(
-        self,
-        iterable: Iterable,
-        name: str,
-        unit: str = "markets",
-        total: int | None = None,
-    ) -> Iterable:
-        """Applies the progress bar to the iterable."""
-        if not self.progress_bar_enabled:
-            return iterable
-        else:
-            if not unit.startswith(" "):
-                unit = " " + unit
-            return tqdm(iterable, desc=name, unit=unit, total=total)
-
-    @staticmethod
-    def _locate_market_catalogues(target_dir: str | Path) -> Iterator[Path]:
-        """
-        Returns a list of path to market catalogues found in the
-        target directory.
-        """
-        return Path(target_dir).rglob("1.*.json")
-
     def _get_number_of_entries(self, connection: sqlite3.Connection) -> int:
         """
         Returns the number of rows in the database index.
@@ -280,112 +553,3 @@ class BetfairDatabase:
         return connection.execute(f"SELECT COUNT(*) FROM {SQL_TABLE_NAME}").fetchone()[
             0
         ]
-
-    def _process_market_data(
-        self,
-        source_dir: str | Path,
-        connection: sqlite3.Connection,
-        copy: bool = False,
-        import_pattern: Callable[[dict], str] | None = None,
-        on_duplicates: DuplicatePolicy | None = None,
-    ) -> int:
-        """
-        Processes market catalogues, converts the data to a tabular format and
-        inserts it as rows into a SQL table.
-
-        Returns the number of SQL table rows inserted. Optionally performs additional
-        data processing for racing markets.
-
-        copy, import_pattern and on_duplicates need to be provided when inserting data
-        into the database, but should be omitted when indexing the database.
-        """
-        # Initialise variables
-        rows_inserted = 0
-        markets_updated_count = 0
-        markets_skipped_count = 0
-        missing_data_files_count = 0
-        updating_existing_database = bool(import_pattern and on_duplicates)
-        debug_logging_enabled = _is_debug_logging_enabled()
-        corrupt_markets = []
-
-        markets = list(
-            self._progress_bar(
-                (Market(mc) for mc in self._locate_market_catalogues(source_dir)),
-                "Locating markets",
-            )
-        )
-        total_markets_count = len(markets)
-
-        # Two-pass required, so cache generated Market objects in RAM
-        for market in self._progress_bar(markets, "Processing markets"):
-            try:
-                self._racing_data_processor.add(market)  # Rejects non-racing markets
-            except JSONDecodeError:
-                logger.error("Error parsing '%s'.", market.market_catalogue_file)
-                corrupt_markets.append(market)
-        for market in corrupt_markets:
-            markets.remove(market)
-        for market in self._progress_bar(markets, "Importing markets"):
-            try:
-                # Database is being updated
-                if updating_existing_database:
-                    dest_dir = self.database_dir / import_pattern(
-                        market.market_catalogue_data
-                    )
-                    # Move and copy are conditional on the duplicate handling policy
-                    # and set market.sql_action accordingly
-                    market = (
-                        market.copy(dest_dir, on_duplicates)
-                        if copy
-                        else market.move(dest_dir, on_duplicates)
-                    )
-                    if market.sql_action is SQLAction.SKIP:
-                        markets_skipped_count += 1
-                        if debug_logging_enabled:
-                            logger.debug("Skipping '%s'.", market.market_data_file)
-                        continue
-
-                # This code block is only ever executed when updating the database
-                if market.sql_action is SQLAction.UPDATE:
-                    # SQL does not support updating a whole row at a time and requires one to list
-                    # individual fields and values to update. A simpler way to achieve the same
-                    # outcome is to delete and re-insert the row.
-                    connection.execute(
-                        f"DELETE FROM {SQL_TABLE_NAME}"
-                        f" WHERE {MARKET_CATALOGUE_FILE_PATH} = '{market.market_catalogue_file}'"
-                    )
-                    markets_updated_count += 1
-                    if debug_logging_enabled:
-                        logger.debug("Updating '%s'.", market.market_data_file)
-
-                # This section is always executed, for both updating and indexing
-                sql_data_map = market.create_sql_mapping(
-                    # Rejects non-racing markets
-                    self._racing_data_processor.get(market)
-                )
-                connection.execute(
-                    f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",
-                    tuple(sql_data_map.values()),
-                )
-                rows_inserted += 1
-                if debug_logging_enabled and (market.sql_action is SQLAction.INSERT):
-                    logger.debug("Adding '%s'.", market.market_data_file)
-
-            except MarketDataFileError:
-                missing_data_files_count += 1
-                logger.error(
-                    "Missing market data file for catalogue '%s'",
-                    market.market_catalogue_file,
-                )
-        logger.info(
-            "Finished %s %d markets.",
-            "importing" if updating_existing_database else "indexing",
-            total_markets_count,
-        )
-        logger.info("Added: %d", rows_inserted - markets_updated_count)
-        if updating_existing_database:
-            logger.info("Updated: %d", markets_updated_count)
-            logger.info("Skipped: %d", markets_skipped_count)
-        logger.info("Corrupt: %d", len(corrupt_markets))
-        logger.info("Incomplete: %d", missing_data_files_count)
-        return rows_inserted

@@ -104,7 +104,8 @@ class TestBetfairDatabase(unittest.TestCase):
                 "Finished indexing 7 markets.",
                 "Added: 5",
                 "Corrupt: 1",
-                "Incomplete: 1",
+                "No data: 1",
+                "No metadata: 0",
             ]
             for expected, actual in zip(expected_messages, info_messages, strict=True):
                 self.assertEqual(expected, actual)
@@ -148,7 +149,8 @@ class TestBetfairDatabase(unittest.TestCase):
                     "Finished indexing 4 markets.",
                     "Added: 4",
                     "Corrupt: 0",
-                    "Incomplete: 0",
+                    "No data: 0",
+                    "No metadata: 0",
                 ]
                 for expected, actual in zip(
                     expected_messages, info_messages, strict=True
@@ -192,7 +194,8 @@ class TestBetfairDatabase(unittest.TestCase):
                     "Updated: 0",
                     "Skipped: 1",
                     "Corrupt: 0",
-                    "Incomplete: 0",
+                    "No data: 0",
+                    "No metadata: 0",
                 ]
                 for expected, actual in zip(
                     expected_messages, info_messages, strict=True
@@ -225,7 +228,8 @@ class TestBetfairDatabase(unittest.TestCase):
                     "Updated: 3",
                     "Skipped: 0",
                     "Corrupt: 0",
-                    "Incomplete: 0",
+                    "No data: 0",
+                    "No metadata: 0",
                 ]
                 for expected, actual in zip(
                     expected_messages, info_messages, strict=True

@@ -99,11 +99,11 @@ class RacingDataProcessor:
         """Adds and processes market catalogue data."""
         if market.racing:
             try:
-                market_catalogue_data = market.market_catalogue_data
-                if market_catalogue_data["description"]["marketType"] == WIN:
-                    self._race_metadata_lookup[
-                        self.make_race_id(market_catalogue_data)
-                    ] = extract_race_metadata(market_catalogue_data["marketName"])
+                metadata = market.metadata
+                if metadata["description"]["marketType"] == WIN:
+                    self._race_metadata_lookup[self.make_race_id(metadata)] = (
+                        extract_race_metadata(metadata["marketName"])
+                    )
             except KeyError:
                 # Incomplete or unsuitable market catalogue
                 return
@@ -117,7 +117,7 @@ class RacingDataProcessor:
         if market.racing:
             try:
                 metadata = self._race_metadata_lookup[
-                    race_id := self.make_race_id(market.market_catalogue_data)
+                    race_id := self.make_race_id(market.metadata)
                 ]
                 metadata["raceId"] = race_id
                 return metadata

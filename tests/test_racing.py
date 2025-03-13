@@ -10,6 +10,12 @@ from betfairdatabase.racing import (
 )
 
 TEST_DATA_DIR = Path("./tests/data/datasets")
+WIN_MARKET_CATALOGUE = TEST_DATA_DIR / "zip-lzma/1.197931750.json"
+WIN_MARKET_DATA = WIN_MARKET_CATALOGUE.with_suffix(".zip")
+PLACE_MARKET_CATALOGUE = TEST_DATA_DIR / "zip-lzma/1.197931751.json"
+PLACE_MARKET_DATA = PLACE_MARKET_CATALOGUE.with_suffix(".zip")
+NON_RACING_MARKET_CATALOGUE = TEST_DATA_DIR / "uncompressed/1.216418252.json"
+NON_RACING_MARKET_DATA = NON_RACING_MARKET_CATALOGUE.with_suffix("")
 
 # WIN market names for extracing race metadata
 # UK, IRE, USA events
@@ -90,12 +96,11 @@ class TestRacing(unittest.TestCase):
 
     def test_racing_data_processor(self):
         """Tests the racing data processor."""
-        win_market = Market(TEST_DATA_DIR / "zip-lzma/1.197931750.json")
-        place_market = Market(TEST_DATA_DIR / "zip-lzma/1.197931751.json")
-        non_racing_market = Market(TEST_DATA_DIR / "uncompressed/1.216418252.json")
-        markets = (win_market, place_market, non_racing_market)
+        win_market = Market(WIN_MARKET_CATALOGUE, WIN_MARKET_DATA)
+        place_market = Market(PLACE_MARKET_CATALOGUE, PLACE_MARKET_DATA)
+        non_racing_market = Market(NON_RACING_MARKET_CATALOGUE, NON_RACING_MARKET_DATA)
         proc = RacingDataProcessor()
-        for market in markets:
+        for market in (win_market, place_market, non_racing_market):
             proc.add(market)  # No exception should be raised
         metadata = proc.get(win_market)
         self.assertEqual(len(metadata), 4)  # Not empty
@@ -110,8 +115,8 @@ class TestRacing(unittest.TestCase):
         """
         Incomplete or defective market catalogue must not raise an exception.
         """
-        mock_market = mock.Mock()
-        mock_market.market_catalogue_data = {}
+        mock_market = mock.Mock(spec_set=Market(WIN_MARKET_CATALOGUE, WIN_MARKET_DATA))
+        mock_market.metadata = {}
         mock_market.racing = True
         proc = RacingDataProcessor()
         # Test passes if no exceptions are raised

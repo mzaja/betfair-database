@@ -1,6 +1,6 @@
 import re
 
-from betfairdatabase.market import Market
+from betfairdatabase.market import Market, MarketCatalogueData, MarketDefinitionData
 
 # ---------------------------------------------------------------------------
 # CONST
@@ -84,19 +84,23 @@ class RacingDataProcessor:
         self._race_metadata_lookup = {}
 
     @staticmethod
-    def make_race_id(market_catalogue_data: dict) -> str:
+    def make_race_id(
+        market_metadata: MarketCatalogueData | MarketDefinitionData,
+    ) -> str:
         """Creates an unambiguous lookup for individual races."""
+        # TODO: Handle market definition metadata
         return ",".join(
             (
-                market_catalogue_data["eventType"]["id"],
-                market_catalogue_data["event"]["countryCode"],
-                market_catalogue_data["event"]["venue"],
-                market_catalogue_data["marketStartTime"],
+                market_metadata["eventType"]["id"],
+                market_metadata["event"]["countryCode"],
+                market_metadata["event"]["venue"],
+                market_metadata["marketStartTime"],
             )
         )
 
-    def add(self, market: Market):
-        """Adds and processes market catalogue data."""
+    def add(self, market: Market) -> None:
+        """Processes market metadata and stores the additional racing metadata into the cache."""
+        # TODO: Handle market definition metadata
         if market.racing:
             try:
                 metadata = market.metadata
@@ -105,14 +109,13 @@ class RacingDataProcessor:
                         extract_race_metadata(metadata["marketName"])
                     )
             except KeyError:
-                # Incomplete or unsuitable market catalogue
-                return
+                # Incomplete or unsuitable market metadata
+                pass
 
     def get(self, market: Market) -> dict | None:
         """
-        Retrieves the racing metadata for the provided market catalogue.
-
-        If metadata cannot be retrieved, returns None.
+        Retrieves the racing metadata for the provided Market object.
+        If racing metadata cannot be retrieved, returns None.
         """
         if market.racing:
             try:
@@ -122,7 +125,7 @@ class RacingDataProcessor:
                 metadata["raceId"] = race_id
                 return metadata
             except KeyError:
-                # Unsuitable market catalogue
-                # Also raised by make_race_id() if race_id cannot be constructed
+                # No racing metadata exists in the cache for this market, or
+                # a valid race ID cannot be constructed by make_race_id().
                 pass
         return None  # More efficient than creating an empty dict thousands of times

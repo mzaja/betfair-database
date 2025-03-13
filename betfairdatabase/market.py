@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo
 
 from betfairdatabase.const import (
     ENCODING_UTF_8,
+    MARKET_DATA_FILE_PATH,
+    MARKET_METADATA_FILE_PATH,
     SQL_TABLE_COLUMNS,
     DuplicatePolicy,
     SQLAction,
@@ -32,26 +34,26 @@ class MarketDefinitionData(dict):
 
 class Market:
     """
-    Holds the information about market catalogue and market data files.
+    Holds information about the market metadata and the market data files.
 
     Improves performance by caching results of slow I/O or CPU-intensive operations.
 
     Attributes:
-        - market_catalogue_file : Path to the market catalogue file for this market.
+        - market_metadata_file : Path to the file describing the contents of the market data file.
+                                 Can be either a market catalogue file or a market definition file.
+        - market_data_file : Path to the market data file for this market.
         - sql_action : Tells the database what to do with the market when procesing it.
                        It gets modified when the market is moved or copied, depending on
                        the duplicate handling policy. Default value is INSERT.
     Properties:
-        - market_data_file : Returns the path to the market data file for this market.
-                             Raises MarketDataFileError if the market data file does not exist.
-        - metadata : Returns the parsed market catalogue data as a dict.
+        - metadata : Returns the parsed market metadata data as a dict.
         - racing : True if this is a horse or a greyhound racing market, else False.
 
     Methods:
-        - create_sql_mapping : Transforms the parsed market catalogue data to a flat
-                               dictionary representation, suitable for SQL import.
-        - copy : Copies market catalogue and data files to the destination. Updates paths.
-        - move : Moves market catalogue and data files to the destination. Updates paths.
+        - create_sql_mapping : Transforms the parsed market metadata to a flat
+                               dictionary representation suitable for SQL import.
+        - copy : Copies market metadata and data files to the destination. Updates paths.
+        - move : Moves market metadata and data files to the destination. Updates paths.
     """
 
     def __init__(self, market_metadata_file: Path, market_data_file: Path):
@@ -61,7 +63,7 @@ class Market:
 
     @cached_property
     def metadata(self) -> MarketCatalogueData | MarketDefinitionData:
-        """Returns parsed market catalogue data, if available, else market definition data."""
+        """Returns parsed market metadata, with the data source indicated by the return type."""
         metadata = json.loads(
             self.market_metadata_file.read_text(encoding=ENCODING_UTF_8),
         )
@@ -79,7 +81,7 @@ class Market:
         try:
             event_type_id = (
                 data["eventType"]["id"]
-                if isinstance(data, MarketCatalogueData)  ####### Change this
+                if isinstance(data, MarketCatalogueData)
                 else data["eventTypeId"]
             )
             return event_type_id in RACING_EVENT_TYPE_IDS
@@ -94,11 +96,11 @@ class Market:
         values are values in a row. Extra key-value pairs can be added
         through additional_metadata argument.
 
-        If no_paths is True, marketCatalogueFilePath and marketDataFilePath
-        field values are set to None.
+        If no_paths is True, marketMetadataFilePath and marketDataFilePath
+        fields are set to None.
         """
         # Call below is cached, so it must be a separate method
-        data = self._transform_market_catalogue()
+        data = self._transform_market_metadata()
 
         # Insert additional metadata if any is provided
         if additional_metadata:
@@ -106,17 +108,17 @@ class Market:
 
         # Insert file location info
         if not no_paths:
-            data["marketCatalogueFilePath"] = self._str_or_none(
+            data[MARKET_METADATA_FILE_PATH] = self._str_or_none(
                 self.market_metadata_file
             )
-            data["marketDataFilePath"] = self._str_or_none(self.market_data_file)
+            data[MARKET_DATA_FILE_PATH] = self._str_or_none(self.market_data_file)
 
         # All keys not in SQL_TABLE_COLUMNS are dropped
         return {k: data.get(k, None) for k in SQL_TABLE_COLUMNS}
 
     def copy(self, dest_dir: str | Path, on_duplicates: DuplicatePolicy) -> Market:
         """
-        Copies the market catalogue and market data file to the destination
+        Copies the market metadata and market data file to the destination
         directory, returning a new Market wrapper around them.
 
         Replaces the destination file if it already exists.
@@ -126,7 +128,7 @@ class Market:
 
     def move(self, dest_dir: str | Path, on_duplicates: DuplicatePolicy) -> Market:
         """
-        Moves the market catalogue and market data file to the destination
+        Moves the market metadata and market data file to the destination
         directory, modifying this object in place and returning a reference to it.
 
         Replaces the destination file if it already exists.
@@ -154,14 +156,15 @@ class Market:
         return None if obj is None else str(obj)
 
     @cache
-    def _transform_market_catalogue(self) -> dict:
+    def _transform_market_metadata(self) -> dict:
         """
-        Transforms parsed market catalogue data into a flat dict
+        Transforms parsed market metadata into a flat dict
         representation suitable for SQL table import.
         """
-        # Break out unnecessary parts and those that need further processing
-        data = self.metadata.copy()
+        # TODO: Handle market definition metadata
+        data = self.metadata.copy()  # Copy so the original is not modified
 
+        # Break out unnecessary parts and those that need further processing
         if description := data.pop("description", None):
             self._flatten_subdict(description, "priceLadderDescription")
             self._flatten_subdict(description, "lineRangeInfo")
@@ -195,14 +198,14 @@ class Market:
         self, dest_dir: str | Path, copy: bool, on_duplicates: DuplicatePolicy
     ) -> Market:
         """
-        Moves the market catalogue and the market data file to the specified directory.
+        Moves the market metadata and the market data file to the specified directory.
         Returns a new Market object with the updated paths to market files. The paths
         are updated regardless of whether the files were actually moved or copied.
         """
         # Determine output dir and destination file paths
         dest_dir = Path(dest_dir).resolve()
 
-        # Process market catalogue?
+        # Process the market metadata file?
         market_metadata_dest_file = dest_dir / self.market_metadata_file.name
         if market_metadata_dest_file.exists():
             if on_duplicates is DuplicatePolicy.REPLACE:
@@ -216,14 +219,14 @@ class Market:
                 )
             ):
                 # Policy is SKIP,
-                # or policy is UPDATE the market catalogue data has not been modified
+                # or policy is UPDATE the market metadata file has not been modified
                 self.sql_action = SQLAction.SKIP
             else:
-                # Policy is UPDATE and the market catalogue data has been modified
+                # Policy is UPDATE and the market metadata file has been modified
                 self.sql_action = SQLAction.UPDATE
-        process_market_catalogue = self.sql_action is not SQLAction.SKIP
+        process_market_metadata_file = self.sql_action is not SQLAction.SKIP
 
-        # Process market data file?
+        # Process the market data file?
         market_data_dest_file = dest_dir / self.market_data_file.name
         process_market_data_file = True
         if market_data_dest_file.exists():
@@ -246,7 +249,7 @@ class Market:
             market = self  # Modify itself in-place
 
         dest_dir.mkdir(exist_ok=True, parents=True)
-        if process_market_catalogue:
+        if process_market_metadata_file:
             file_operation(self.market_metadata_file, market_metadata_dest_file)
         if process_market_data_file:
             file_operation(self.market_data_file, market_data_dest_file)

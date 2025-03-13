@@ -34,24 +34,11 @@ class IndexExistsError(BetfairDatabaseError):
         super().__init__(self.base_msg + extra)
 
 
-class MarketDataFileError(BetfairDatabaseError):
-    """
-    Raised when a market data file cannot be found or an
-    error is encountered when processing it.
-    """
-
-    def __init__(self, msg: str):
-        super().__init__(msg)
-
-
 class MarketDefinitionMissingError(BetfairDatabaseError):
     """
     Raised when the market definition index is missing in the target directory.
     """
 
     def __init__(self, market_data_file: str | Path):
-        msg = (
-            "Market definition was not found in neither the "
-            f"first nor the last line of '{market_data_file}'."
-        )
+        msg = f"Market definition not found in '{market_data_file}'."
         super().__init__(msg)

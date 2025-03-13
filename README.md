@@ -31,25 +31,27 @@ dataset = bfdb.select(
 )
 for market in dataset:
     print(
-        market["marketDataFilePath"],  # Path to stream data file
-        market["marketCatalogueFilePath"],  # Path to market catalogue file
+        market["marketDataFilePath"],  # Path to the stream data file
+        market["marketMetadataFilePath"],  # Path to the market metadata file
     )
 ```
 
-The historical data can be grouped and divided using any subfolder hierarchy, but it must follow this convention:
+Both the self-recorded and official Betfair data files are supported. The historical data can be grouped and divided into any subfolder hierarchy, but it must follow this convention:
 
-1. Market catalogue is stored in a JSON file named `<market id>.json`.
-2. Market data file (containing stream data) is stored in the same folder as the market catalogue file. It shares the same basename `<market id>` and ends with `.zip`, `.gz` or `.bz2`, or it has no extension (uncompressed data).
+1. Market metadata (market catalogue or market definition) is stored in a JSON file named `<market id>.json`.
+2. Market data file (containing stream data) is stored in the same folder as the market metadata file. It shares the same basename `<market id>` and ends with `.zip`, `.gz` or `.bz2`, or it has no extension (uncompressed data).
 
 A sample database structure is shown below:
 ```
 my_betfair_data/
 ├── arbitrary_folder/
-    ├── 1.22334455.json  # Market catalogue file
+    ├── 1.22334455.json  # Market metadata file
     ├── 1.22334455  # Uncompressed market data file
-    ├── 1.55667788.json  # Market catalogue file
+    ├── 1.55667788.json  # Market metadata file
     └── 1.55667788.zip  # Compressed market data file
 ```
+
+If a market metadata file is missing, it will be created from the most recent market definition found in the market data file. If no market definition is present in the data file, it will not be possible to index the file.
 
 ### Retrieving data
 `select()` method accepts the following arguments:

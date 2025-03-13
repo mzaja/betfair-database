@@ -118,7 +118,7 @@ class TestIntegrationPart1(TestIntegrationBase):
         # Check that paths to files are absolute and correct.
         for market in markets:
             self.assertIn(
-                Path(market["marketCatalogueFilePath"]), self.catalogue_source_files
+                Path(market["marketMetadataFilePath"]), self.catalogue_source_files
             )
             self.assertIn(Path(market["marketDataFilePath"]), self.data_source_files)
 
@@ -202,7 +202,7 @@ class TestIntegrationPart1(TestIntegrationBase):
             self.assertListEqual(list(market.keys()), bfdb.columns())
 
         # Columns specified and in non-standard order
-        columns = ["marketCatalogueFilePath", "marketType", "marketId", "marketName"]
+        columns = ["marketMetadataFilePath", "marketType", "marketId", "marketName"]
         markets = bfdb.select(self.test_data_dir, columns=columns)
         for market in markets:
             self.assertListEqual(list(market.keys()), columns)
@@ -438,7 +438,7 @@ class TestIntegrationPart2(TestIntegrationBase):
                 markets = bfdb.select(self.database_dir)
                 self.assertEqual(len(markets), market_count)
                 for market in markets:
-                    for file_type in ("marketCatalogueFilePath", "marketDataFilePath"):
+                    for file_type in ("marketMetadataFilePath", "marketDataFilePath"):
                         self.assertTrue(Path(market[file_type]).exists())
                 self.assertEqual(
                     [f.name for f in dataset.iterdir()], leftover_src_files

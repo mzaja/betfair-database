@@ -28,7 +28,7 @@
  "eventTimezone": "GMT",
  "eventVenue": null,
  "eventOpenDate": "2023-07-28T10:00:00.000Z",
- "marketCatalogueFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216347921.json",
+ "marketMetadataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216347921.json",
  "marketDataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216347921"
 },
 {
@@ -57,7 +57,7 @@
  "eventTimezone": "GMT",
  "eventVenue": null,
  "eventOpenDate": "2023-07-28T02:31:00.000Z",
- "marketCatalogueFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216395208.json",
+ "marketMetadataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216395208.json",
  "marketDataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216395208"
 },
 {
@@ -86,7 +86,7 @@
  "eventTimezone": "GMT",
  "eventVenue": null,
  "eventOpenDate": "2023-07-28T02:31:00.000Z",
- "marketCatalogueFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216395251.json",
+ "marketMetadataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216395251.json",
  "marketDataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216395251"
 },
 {
@@ -115,7 +115,7 @@
  "eventTimezone": "GMT",
  "eventVenue": null,
  "eventOpenDate": "2023-07-27T20:30:00.000Z",
- "marketCatalogueFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216418252.json",
+ "marketMetadataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216418252.json",
  "marketDataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216418252"
 },
 {
@@ -144,7 +144,7 @@
  "eventTimezone": "Europe/London",
  "eventVenue": "Uttoxeter",
  "eventOpenDate": "2023-07-28T12:35:00.000Z",
- "marketCatalogueFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216424223.json",
+ "marketMetadataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216424223.json",
  "marketDataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\uncompressed\\1.216424223"
 },
 {
@@ -173,7 +173,7 @@
 "eventTimezone": "Europe/London",
 "eventVenue": "DAX",
 "eventOpenDate": "2022-08-01T10:00:00.000Z",
-"marketCatalogueFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\zip-lzma\\1.201590187.json",
+"marketMetadataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\zip-lzma\\1.201590187.json",
 "marketDataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\zip-lzma\\1.201590187.zip"
 },
 {
@@ -202,7 +202,7 @@
  "eventTimezone": "Europe/London",
  "eventVenue": "Sheffield",
  "eventOpenDate": "2022-04-19T17:19:00.000Z",
- "marketCatalogueFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\zip-lzma\\1.197931750.json",
+ "marketMetadataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\zip-lzma\\1.197931750.json",
  "marketDataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\zip-lzma\\1.197931750.zip"
 },
 {
@@ -231,7 +231,7 @@
  "eventTimezone": "Europe/London",
  "eventVenue": "Sheffield",
  "eventOpenDate": "2022-04-19T17:19:00.000Z",
- "marketCatalogueFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\zip-lzma\\1.197931751.json",
+ "marketMetadataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\zip-lzma\\1.197931751.json",
  "marketDataFilePath": "C:\\Users\\Harry Punter\\AppData\\Local\\Temp\\tmpjodd7y_5\\zip-lzma\\1.197931751.zip"
 }
 ]

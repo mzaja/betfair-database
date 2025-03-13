@@ -148,12 +148,12 @@ def create_market_definition_file(
 # ---------------------------------------------------------------------------
 class ImportPatterns:
     """
-    Contains patterns for mapping market catalogue data to the output
+    Contains patterns for mapping market metadata to the output
     directory path in the database.
     """
 
     @staticmethod
-    def betfair_historical(market_catalogue_data: dict) -> str:
+    def betfair_historical(market_metadata: dict) -> str:
         """
         Generates the output directory path using the pattern
         "{year_no}/{month_name}/{day_no}/{event_id}"
@@ -168,16 +168,18 @@ class ImportPatterns:
         and ".../Feb/5/...". However, since the event end time is not a part of the
         market catalogue, it is impossible to fully recreate this pattern.
         """
-        market_time = parse_datetime(market_catalogue_data["marketStartTime"])
-        event_id = market_catalogue_data["event"]["id"]
+        # TODO: Handle market definition metadata
+        market_time = parse_datetime(market_metadata["marketStartTime"])
+        event_id = market_metadata["event"]["id"]
         return market_time.strftime(f"%Y/%b/{market_time.day}/{event_id}")
 
     @staticmethod
-    def event_id(market_catalogue_data: dict) -> str:
+    def event_id(market_metadata: dict) -> str:
         """Market data is stored into directories named after event ids."""
-        return market_catalogue_data["event"]["id"]
+        # TODO: Handle market definition metadata
+        return market_metadata["event"]["id"]
 
     @staticmethod
-    def flat(market_catalogue_data: dict) -> str:
+    def flat(market_metadata: dict) -> str:
         """Market data is stored directly into the base directory."""
         return ""

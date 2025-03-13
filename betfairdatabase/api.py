@@ -82,9 +82,9 @@ def insert(
     ) = DuplicatePolicy.UPDATE,
 ) -> int:
     """
-    Inserts market catalogue/data files from source_dir into the database.
+    Inserts market metadata and data files from source_dir into the database.
 
-    Returns the number of inserted table rows (market catalogue/data file pairs).
+    Returns the number of inserted table rows (market metadata/data file pairs).
 
     A custom import pattern can be provided to instruct the database how to
     interally organise the files into directories.
@@ -93,7 +93,7 @@ def insert(
         - `skip`: Duplicate files are not processed. Index is not updated.
         - `replace`: Existing duplicate files are replaced with incoming ones. Index is updated.
         - `update`:
-            Existing market catalogue file is replaced if the incoming file contains a change
+            Existing market metadata file is replaced if the incoming file contains a change
             which is reflected in the index, and the index is updated. Market data files are
             replaced if the incoming data file is larger than the existing one.
     """

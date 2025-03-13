@@ -13,8 +13,8 @@ from tqdm import tqdm
 from betfairdatabase.const import (
     DATA_FILE_SUFFIXES,
     INDEX_FILENAME,
-    MARKET_CATALOGUE_FILE_PATH,
     MARKET_DATA_FILE_PATH,
+    MARKET_METADATA_FILE_PATH,
     ROWID,
     SQL_TABLE_COLUMNS,
     SQL_TABLE_NAME,
@@ -267,11 +267,11 @@ class MarketFileProcessor(ProgressBarMixin):
             markets_gen, "Processing markets", total=len(self.metadata_files)
         ):
             try:
-                # Racing data processor triggers the parsing of the market catalogue
+                # Racing data processor triggers the parsing of the market metadata
                 # because it needs to check whether this is a racing market.
                 # Non-racing markets are ignored by the racing data processor.
                 self.racing_data_processor.add(market)
-                # No error parsing the market catalogue
+                # No error parsing the market metadata means it is importable
                 importable_markets.append(market)
             except JSONDecodeError:
                 self.counters.corrupt_files += 1
@@ -314,7 +314,7 @@ class MarketFileProcessor(ProgressBarMixin):
                     # outcome is to delete and re-insert the row.
                     connection.execute(
                         f"DELETE FROM {SQL_TABLE_NAME}"
-                        f" WHERE {MARKET_CATALOGUE_FILE_PATH} = '{market.market_metadata_file}'"
+                        f" WHERE {MARKET_METADATA_FILE_PATH} = '{market.market_metadata_file}'"
                     )
                     self.counters.markets_updated += 1
                     if self.debug_logging_enabled:
@@ -393,9 +393,9 @@ class BetfairDatabase(ProgressBarMixin):
         ) = DuplicatePolicy.UPDATE,
     ) -> int:
         """
-        Inserts market catalogue/data files from source_dir into the database.
+        Inserts market metadata and data files from source_dir into the database.
 
-        Returns the number of inserted table rows (market catalogue/data file pairs).
+        Returns the number of inserted table rows (market metadata/data file pairs).
 
         A custom import pattern can be provided to instruct the database how to
         interally organise the files into directories.
@@ -404,7 +404,7 @@ class BetfairDatabase(ProgressBarMixin):
             - `skip`: Duplicate files are not processed. Index is not updated.
             - `replace`: Existing duplicate files are replaced with incoming ones. Index is updated.
             - `update`:
-                Existing market catalogue file is replaced if the incoming file contains a change
+                Existing market metadata file is replaced if the incoming file contains a change
                 which is reflected in the index, and the index is updated. Market data files are
                 replaced if the incoming data file is larger than the existing one.
         """

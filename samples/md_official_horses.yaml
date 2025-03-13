@@ -1,0 +1,118 @@
+# This is the processed market definition file, where "marketId" is injected into
+# the market definition.
+{
+    "bspMarket": true,
+    "turnInPlayEnabled": true,
+    "persistenceEnabled": true,
+    "marketBaseRate": 10.0,
+    "eventId": "32369246",
+    "eventTypeId": "7",
+    "numberOfWinners": 1,
+    "bettingType": "ODDS",
+    "marketType": "WIN",
+    "marketTime": "2023-05-23T07:43:00.000Z",
+    "suspendTime": "2023-05-23T07:43:00.000Z",
+    "bspReconciled": true,
+    "complete": true,
+    "inPlay": true,
+    "crossMatching": false,
+    "runnersVoidable": false,
+    "numberOfActiveRunners": 0,
+    "betDelay": 1,
+    "status": "CLOSED",
+    "settledTime": "2023-05-23T07:45:49.000Z",
+    "runners": [
+        {
+            "adjustmentFactor": 3.19,
+            "status": "LOSER",
+            "sortPriority": 1,
+            "bsp": 16.95,
+            "id": 19663797,
+            "name": "1. Imapest"
+        },
+        {
+            "adjustmentFactor": 3.19,
+            "status": "LOSER",
+            "sortPriority": 2,
+            "bsp": 35.18,
+            "id": 41127088,
+            "name": "2. Sheza Cracker"
+        },
+        {
+            "adjustmentFactor": 4.74,
+            "status": "LOSER",
+            "sortPriority": 3,
+            "bsp": 40.0,
+            "id": 28506957,
+            "name": "3. Life Gets Better"
+        },
+        {
+            "adjustmentFactor": 57.9,
+            "status": "WINNER",
+            "sortPriority": 4,
+            "bsp": 1.93,
+            "id": 56127640,
+            "name": "4. Waratah Lou"
+        },
+        {
+            "adjustmentFactor": 1.16,
+            "status": "LOSER",
+            "sortPriority": 5,
+            "bsp": 79.3,
+            "id": 46329059,
+            "name": "5. Anyonewilldo"
+        },
+        {
+            "adjustmentFactor": 1.16,
+            "status": "LOSER",
+            "sortPriority": 6,
+            "bsp": 34.4,
+            "id": 22834459,
+            "name": "6. Ally Rogan"
+        },
+        {
+            "adjustmentFactor": 1.42,
+            "status": "LOSER",
+            "sortPriority": 7,
+            "bsp": 210.0,
+            "id": 6309715,
+            "name": "7. Hoi An"
+        },
+        {
+            "adjustmentFactor": 18.18,
+            "status": "LOSER",
+            "sortPriority": 8,
+            "bsp": 23.6,
+            "id": 46449566,
+            "name": "8. Speculating"
+        },
+        {
+            "adjustmentFactor": 2.39,
+            "status": "LOSER",
+            "sortPriority": 9,
+            "bsp": 155.52,
+            "id": 26085651,
+            "name": "9. Jacks Last Hoo Raa"
+        },
+        {
+            "adjustmentFactor": 6.65,
+            "status": "LOSER",
+            "sortPriority": 10,
+            "bsp": 9.1,
+            "id": 46521262,
+            "name": "10. Our Rebel Yell"
+        }
+    ],
+    "regulators": [
+        "MR_INT"
+    ],
+    "venue": "Wagga",
+    "countryCode": "AU",
+    "discountAllowed": true,
+    "timezone": "Australia/Sydney",
+    "openDate": "2023-05-23T07:43:00.000Z",
+    "version": 5260287089,
+    "name": "R1 1740m Pace M",
+    "eventName": "Wagga (AUS) 23rd May",
+    "marketId": "1.214483963"
+}

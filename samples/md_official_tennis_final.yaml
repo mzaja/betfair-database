@@ -1,5 +1,7 @@
 # Final market definition of a tennis market. Differences between the initial
 # definition are noted. Dynamic fields such as "inPlay" or "status" are ignored.
+# This is an unprocessed part of the market change message ("mc"), where market ID
+# is placed outside of the market definition.
 {
     "id": "1.223716981",
     "marketDefinition": {

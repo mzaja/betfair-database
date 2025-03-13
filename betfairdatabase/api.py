@@ -3,7 +3,7 @@ from typing import Callable, Literal
 
 from betfairdatabase.const import DuplicatePolicy
 from betfairdatabase.database import BetfairDatabase
-from betfairdatabase.utils import ImportPatterns
+from betfairdatabase.imports import ImportPatterns
 
 # Use this global variable to turn the progress bar on or off
 # when using the top-level module interface

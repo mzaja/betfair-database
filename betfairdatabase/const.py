@@ -24,6 +24,7 @@ SQL_TABLE_COLUMNS = (
     "bettingType",
     "turnInPlayEnabled",
     "marketType",
+    "numberOfWinners",  # Market definition only
     "priceLadderDescriptionType",
     "lineRangeInfoMarketUnit",
     "eachWayDivisor",
@@ -39,9 +40,13 @@ SQL_TABLE_COLUMNS = (
     "eventTimezone",
     "eventVenue",
     "eventOpenDate",
+    "marketSettledTime",
+    # Injected data - local times
     "localDayOfWeek",
     "localMarketStartTime",
     "localEventOpenDate",
+    "localMarketSettledTime",
+    # Injected data - additional race metadata
     "raceId",
     "raceTypeFromName",
     "raceDistanceMeters",

@@ -3,10 +3,9 @@ from __future__ import annotations
 import copy as cp
 import json
 import shutil
-from functools import cache, cached_property
+from functools import cached_property
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from betfairdatabase.const import (
     ENCODING_UTF_8,
@@ -16,20 +15,12 @@ from betfairdatabase.const import (
     DuplicatePolicy,
     SQLAction,
 )
-from betfairdatabase.utils import parse_datetime
+from betfairdatabase.metadata import MarketCatalogueData, MarketDefinitionData
 
 RACING_EVENT_TYPE_IDS = (
     "7",  # Horse racing
     "4339",  # Greyhound racing
 )
-
-
-class MarketCatalogueData(dict):
-    """Market metadata sourced from a market catalogue."""
-
-
-class MarketDefinitionData(dict):
-    """Market metadata sourced from a market definition."""
 
 
 class Market:
@@ -100,7 +91,7 @@ class Market:
         fields are set to None.
         """
         # Call below is cached, so it must be a separate method
-        data = self._transform_market_metadata()
+        data = self.metadata.transform()
 
         # Insert additional metadata if any is provided
         if additional_metadata:
@@ -139,60 +130,9 @@ class Market:
     ################# PRIVATE METHODS #######################
 
     @staticmethod
-    def _flatten_subdict(parent_dict: dict[str, Any], child_key: str) -> None:
-        """
-        Flattens a dictionary by combining parent and child's key names.
-        Modifies the dictionary in place.
-        """
-        if subdict := parent_dict.pop(child_key, None):
-            for subkey, value in subdict.items():
-                # Preserve camel case in the combined key
-                combined_key = child_key + subkey[0].upper() + subkey[1:]
-                parent_dict[combined_key] = value
-
-    @staticmethod
     def _str_or_none(obj) -> str | None:
         """Returns None if the obj is None, else its string representation."""
         return None if obj is None else str(obj)
-
-    @cache
-    def _transform_market_metadata(self) -> dict:
-        """
-        Transforms parsed market metadata into a flat dict
-        representation suitable for SQL table import.
-        """
-        # TODO: Handle market definition metadata
-        data = self.metadata.copy()  # Copy so the original is not modified
-
-        # Break out unnecessary parts and those that need further processing
-        if description := data.pop("description", None):
-            self._flatten_subdict(description, "priceLadderDescription")
-            self._flatten_subdict(description, "lineRangeInfo")
-            data.update(description)
-
-        if runners := data.pop("runners", None):
-            data["runners"] = len(runners)  # Only note down the number of selections
-
-        self._flatten_subdict(data, "eventType")
-        self._flatten_subdict(data, "competition")
-        self._flatten_subdict(data, "event")
-
-        # Calculate local times if possible
-        try:
-            time_zone = ZoneInfo(self.metadata["event"]["timezone"])
-            market_start_time_local = parse_datetime(
-                self.metadata["marketStartTime"]
-            ).astimezone(time_zone)
-            event_open_date_local = parse_datetime(
-                self.metadata["event"]["openDate"]
-            ).astimezone(time_zone)
-            data["localDayOfWeek"] = market_start_time_local.strftime("%A")
-            data["localMarketStartTime"] = str(market_start_time_local)
-            data["localEventOpenDate"] = str(event_open_date_local)
-        except KeyError:
-            pass  # "event", and therefore "timezone", are not provided
-
-        return data
 
     def _change_location(
         self, dest_dir: str | Path, copy: bool, on_duplicates: DuplicatePolicy

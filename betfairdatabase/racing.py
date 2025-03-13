@@ -88,25 +88,48 @@ class RacingDataProcessor:
         market_metadata: MarketCatalogueData | MarketDefinitionData,
     ) -> str:
         """Creates an unambiguous lookup for individual races."""
-        # TODO: Handle market definition metadata
-        return ",".join(
-            (
-                market_metadata["eventType"]["id"],
-                market_metadata["event"]["countryCode"],
-                market_metadata["event"]["venue"],
-                market_metadata["marketStartTime"],
+        data_type = type(market_metadata)
+        if data_type == MarketCatalogueData:
+            return ",".join(
+                (
+                    market_metadata["eventType"]["id"],
+                    market_metadata["event"]["countryCode"],
+                    market_metadata["event"]["venue"],
+                    market_metadata["marketStartTime"],
+                )
             )
-        )
+        elif data_type == MarketDefinitionData:
+            return ",".join(
+                (
+                    market_metadata["eventTypeId"],
+                    market_metadata["countryCode"],
+                    market_metadata["venue"],
+                    market_metadata["marketTime"],
+                )
+            )
+        else:
+            raise TypeError(
+                "market_metadata argument must be of type MarketCatalogueData or MarketDefinitionData."
+            )
 
     def add(self, market: Market) -> None:
         """Processes market metadata and stores the additional racing metadata into the cache."""
-        # TODO: Handle market definition metadata
         if market.racing:
             try:
                 metadata = market.metadata
-                if metadata["description"]["marketType"] == WIN:
+                if (
+                    isinstance(metadata, MarketCatalogueData)
+                    and metadata["description"]["marketType"] == WIN
+                ):
                     self._race_metadata_lookup[self.make_race_id(metadata)] = (
                         extract_race_metadata(metadata["marketName"])
+                    )
+                elif (
+                    isinstance(metadata, MarketDefinitionData)
+                    and metadata["marketType"] == WIN
+                ):
+                    self._race_metadata_lookup[self.make_race_id(metadata)] = (
+                        extract_race_metadata(metadata["name"])
                     )
             except KeyError:
                 # Incomplete or unsuitable market metadata

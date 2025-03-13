@@ -8,7 +8,7 @@ from betfairdatabase.exceptions import (
     IndexExistsError,
     IndexMissingError,
 )
-from betfairdatabase.utils import ImportPatterns
+from betfairdatabase.imports import ImportPatterns
 
 IMPORT_PATTERNS = ("betfair_historical", "event_id", "flat")
 ON_DUPLICATES = ("skip", "replace", "update")

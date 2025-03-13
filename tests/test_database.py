@@ -8,7 +8,7 @@ from unittest import mock
 from betfairdatabase import BetfairDatabase
 from betfairdatabase.const import DuplicatePolicy
 from betfairdatabase.database import logger
-from betfairdatabase.utils import ImportPatterns
+from betfairdatabase.imports import ImportPatterns
 
 
 class TestBetfairDatabase(unittest.TestCase):

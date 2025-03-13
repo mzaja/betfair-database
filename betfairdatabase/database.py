@@ -27,9 +27,10 @@ from betfairdatabase.exceptions import (
     IndexMissingError,
     MarketDefinitionMissingError,
 )
+from betfairdatabase.imports import ImportPatterns
 from betfairdatabase.market import Market
 from betfairdatabase.racing import RacingDataProcessor
-from betfairdatabase.utils import ImportPatterns, create_market_definition_file
+from betfairdatabase.utils import create_market_definition_file
 
 # ---------------------------------------------------------------------------
 # LOGGING
@@ -283,7 +284,7 @@ class MarketFileProcessor(ProgressBarMixin):
         importable_markets: list[Market],
         connection: sqlite3.Connection,
         copy: bool = False,
-        import_pattern: Callable[[dict], str] | None = None,
+        import_pattern: Callable[[Market], str] | None = None,
         on_duplicates: DuplicatePolicy | None = None,
     ) -> None:
         """
@@ -295,7 +296,7 @@ class MarketFileProcessor(ProgressBarMixin):
         for market in self._progress_bar(importable_markets, "Importing markets"):
             # Database is being updated
             if update_existing_database:
-                dest_dir = self.database_dir / import_pattern(market.metadata)
+                dest_dir = self.database_dir / import_pattern(market)
                 # Move and copy are conditional on the duplicate handling policy
                 # and set market.sql_action accordingly
                 market = (

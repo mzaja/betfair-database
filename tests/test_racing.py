@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from betfairdatabase.market import Market
+from betfairdatabase.market import Market, MarketCatalogueData, MarketDefinitionData
 from betfairdatabase.racing import (
     METERS_PER_FURLONG,
     RacingDataProcessor,
@@ -83,11 +83,13 @@ class TestRacing(unittest.TestCase):
         county_code = "GB"
         venue = "Newcastle"
         market_start_time = "2022-04-19T17:19:00.000Z"
-        market_catalogue_data = {
-            "eventType": {"id": event_type_id},
-            "event": {"countryCode": county_code, "venue": venue},
-            "marketStartTime": market_start_time,
-        }
+        market_catalogue_data = MarketCatalogueData(
+            {
+                "eventType": {"id": event_type_id},
+                "event": {"countryCode": county_code, "venue": venue},
+                "marketStartTime": market_start_time,
+            }
+        )
         race_id = RacingDataProcessor.make_race_id(market_catalogue_data)
         self.assertIn(event_type_id, race_id)
         self.assertIn(county_code, race_id)
@@ -111,14 +113,17 @@ class TestRacing(unittest.TestCase):
         self.assertEqual(metadata["raceTypeFromName"], "OR")
         self.assertIsNone(proc.get(non_racing_market))  # No exception raised
 
-    def test_racing_data_processor_incomplete_market_catalogue(self):
-        """
-        Incomplete or defective market catalogue must not raise an exception.
-        """
-        mock_market = mock.Mock(spec_set=Market(WIN_MARKET_CATALOGUE, WIN_MARKET_DATA))
-        mock_market.metadata = {}
-        mock_market.racing = True
-        proc = RacingDataProcessor()
-        # Test passes if no exceptions are raised
-        proc.add(mock_market)
-        proc.get(mock_market)
+    def test_racing_data_processor_incomplete_market_metadata(self):
+        """Incomplete or defective market catalogue must not raise an exception."""
+        for metadata in [MarketCatalogueData(), MarketDefinitionData()]:
+            with self.subTest(metadata_type=type(metadata)):
+                mock_market = mock.Mock(
+                    # Paths are irrelevant here since metadata is mocked
+                    spec_set=Market(WIN_MARKET_CATALOGUE, WIN_MARKET_DATA)
+                )
+                mock_market.metadata = metadata
+                mock_market.racing = True
+                proc = RacingDataProcessor()
+                # Test passes if no exceptions are raised
+                proc.add(mock_market)
+                proc.get(mock_market)

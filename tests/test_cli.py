@@ -21,7 +21,7 @@ from betfairdatabase.cli import (
     main,
 )
 from betfairdatabase.const import DuplicatePolicy
-from betfairdatabase.utils import ImportPatterns
+from betfairdatabase.imports import ImportPatterns
 
 DATABASE_DIR = "./my_db_dir"
 

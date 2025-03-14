@@ -48,8 +48,8 @@ class Market:
     """
 
     def __init__(self, market_metadata_file: Path, market_data_file: Path):
-        self.market_metadata_file = market_metadata_file.resolve()
-        self.market_data_file = market_data_file.resolve()
+        self.market_metadata_file = market_metadata_file
+        self.market_data_file = market_data_file
         self.sql_action = SQLAction.INSERT
         self._attached_metadata = None
 
@@ -102,12 +102,10 @@ class Market:
         if additional_metadata:
             data.update(additional_metadata)
 
-        # Insert file location info
+        # Insert file location info - use absolute paths
         if not no_paths:
-            data[MARKET_METADATA_FILE_PATH] = self._str_or_none(
-                self.market_metadata_file
-            )
-            data[MARKET_DATA_FILE_PATH] = self._str_or_none(self.market_data_file)
+            data[MARKET_METADATA_FILE_PATH] = str(self.market_metadata_file.resolve())
+            data[MARKET_DATA_FILE_PATH] = str(self.market_data_file.resolve())
 
         # All keys not in SQL_TABLE_COLUMNS are dropped
         return {k: data.get(k, None) for k in SQL_TABLE_COLUMNS}
@@ -134,11 +132,6 @@ class Market:
 
     ################# PRIVATE METHODS #######################
 
-    @staticmethod
-    def _str_or_none(obj) -> str | None:
-        """Returns None if the obj is None, else its string representation."""
-        return None if obj is None else str(obj)
-
     def _change_location(
         self, dest_dir: str | Path, copy: bool, on_duplicates: DuplicatePolicy
     ) -> Market:
@@ -148,7 +141,7 @@ class Market:
         are updated regardless of whether the files were actually moved or copied.
         """
         # Determine output dir and destination file paths
-        dest_dir = Path(dest_dir).resolve()
+        dest_dir = Path(dest_dir)
 
         # Process the market metadata file?
         market_metadata_dest_file = dest_dir / self.market_metadata_file.name

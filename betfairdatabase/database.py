@@ -329,7 +329,7 @@ class MarketFileProcessor(ProgressBarMixin):
                     # outcome is to delete and re-insert the row.
                     connection.execute(
                         f"DELETE FROM {SQL_TABLE_NAME}"
-                        f" WHERE {MARKET_METADATA_FILE_PATH} = '{market.market_metadata_file}'"
+                        f" WHERE {MARKET_METADATA_FILE_PATH} = '{market.market_metadata_file.resolve()}'"
                     )
                     self.counters.markets_updated += 1
                     if self.debug_logging_enabled:

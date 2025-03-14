@@ -126,7 +126,7 @@ class MarketDefinitionProcessor:
         unless overwrite=True is provided.
         """
         # This method will generally not be called with an existing market catalogue
-        output_file = market_data_file.resolve().with_suffix(".json")
+        output_file = market_data_file.with_suffix(".json")
         if overwrite or not output_file.exists():
             metadata = self.parse_market_definition(market_data_file)
             if self.cache_parsed_definitions:

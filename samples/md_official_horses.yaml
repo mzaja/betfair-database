@@ -1,5 +1,5 @@
-# This is the processed market definition file, where "marketId" is injected into
-# the market definition.
+# This is the processed official market definition file,
+# where "marketId" is injected into the market definition.
 {
     "bspMarket": true,
     "turnInPlayEnabled": true,

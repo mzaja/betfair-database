@@ -51,11 +51,16 @@ class Market:
         self.market_metadata_file = market_metadata_file.resolve()
         self.market_data_file = market_data_file.resolve()
         self.sql_action = SQLAction.INSERT
+        self._attached_metadata = None
+
+    def attach_metadata(self, metadata: dict | None) -> None:
+        """Attaches metadata to skip opening and parsing the metadata file."""
+        self._attached_metadata = metadata
 
     @cached_property
     def metadata(self) -> MarketCatalogueData | MarketDefinitionData:
         """Returns parsed market metadata, with the data source indicated by the return type."""
-        metadata = json.loads(
+        metadata = self._attached_metadata or json.loads(
             self.market_metadata_file.read_text(encoding=ENCODING_UTF_8),
         )
         if "name" in metadata:  # Called "marketName" in a market catalogue

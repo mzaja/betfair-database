@@ -29,8 +29,8 @@ from betfairdatabase.exceptions import (
 )
 from betfairdatabase.imports import ImportPatterns
 from betfairdatabase.market import Market
+from betfairdatabase.marketdef import MarketDefinitionProcessor
 from betfairdatabase.racing import RacingDataProcessor
-from betfairdatabase.utils import create_market_definition_file
 
 # ---------------------------------------------------------------------------
 # LOGGING
@@ -143,6 +143,9 @@ class MarketFileProcessor(ProgressBarMixin):
         self.database_dir = Path(database_dir)
         self.counters = Counters()
         self.racing_data_processor = RacingDataProcessor()
+        self.market_definition_processor = MarketDefinitionProcessor(
+            cache_parsed_definitions=True
+        )
         self.debug_logging_enabled = _is_debug_logging_enabled()
         # Initialise file caches
         self.metadata_files = {}  # Market catalogues or market definitions
@@ -243,7 +246,11 @@ class MarketFileProcessor(ProgressBarMixin):
             data_files_without_metadata.items(), "Creating metadata files"
         ):
             try:
-                metadata_file = create_market_definition_file(data_file)
+                metadata_file = (
+                    self.market_definition_processor.create_market_definition_file(
+                        data_file
+                    )
+                )
                 # Add the generated metadata file to registry
                 self.metadata_files[key] = metadata_file
                 if self.debug_logging_enabled:
@@ -267,6 +274,13 @@ class MarketFileProcessor(ProgressBarMixin):
         for market in self._progress_bar(
             markets_gen, "Processing markets", total=len(self.metadata_files)
         ):
+            # If market definition has already been parsed, attach it rather
+            # than opening and parsing the market definition file again
+            market.attach_metadata(
+                self.market_definition_processor.parsed_definitions.pop(
+                    market.market_metadata_file, None
+                )
+            )
             try:
                 # Racing data processor triggers the parsing of the market metadata
                 # because it needs to check whether this is a racing market.

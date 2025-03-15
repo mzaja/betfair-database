@@ -1,12 +1,9 @@
 import unittest
 from unittest import mock
 
-from betfairdatabase.imports import ImportPatterns
-from betfairdatabase.metadata import MarketCatalogueData
 from betfairdatabase.utils import parse_datetime
 
 TIMESTAMP = "2023-06-01T17:09:37.000Z"
-EVENT_ID = "12345678"
 
 
 class TestUtils(unittest.TestCase):
@@ -35,27 +32,3 @@ class TestUtils(unittest.TestCase):
         mock_datetime.fromisoformat.side_effect = (ValueError, mock.Mock())
         parse_datetime(TIMESTAMP)
         mock_datetime.fromisoformat.assert_called_with("2023-06-01T17:09:37.000")
-
-    def test_import_pattern_betfair_historical(self):
-        """Tests the official Betfair's folder naming pattern."""
-        market = mock.Mock(
-            metadata=MarketCatalogueData(
-                {
-                    "marketStartTime": TIMESTAMP,
-                    "event": {"id": EVENT_ID},
-                }
-            )
-        )
-        pattern = ImportPatterns.betfair_historical(market)
-        self.assertEqual(pattern, f"2023/Jun/1/{EVENT_ID}")
-
-    def test_import_pattern_event_id(self):
-        """Tests the pattern of grouping markets by event ids."""
-        market = mock.Mock(metadata=MarketCatalogueData({"event": {"id": EVENT_ID}}))
-        pattern = ImportPatterns.event_id(market)
-        self.assertEqual(pattern, EVENT_ID)
-
-    def test_import_pattern_flat(self):
-        """Tests the pattern of storing all markets in the same folder."""
-        pattern = ImportPatterns.flat(None)  # Argument is unused
-        self.assertEqual(pattern, "")

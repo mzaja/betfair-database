@@ -38,7 +38,8 @@ class TestBetfairDatabase(unittest.TestCase):
         compressed: bool = False,
         uncompressed: bool = False,
         corrupt: bool = False,
-        missing: bool = False,
+        missing_data: bool = False,
+        missing_metadata: bool = False,
         duplicates: bool = False,
     ) -> tempfile.TemporaryDirectory:
         """Cretes a test dataset by copying source data into the temporary directory."""
@@ -50,15 +51,17 @@ class TestBetfairDatabase(unittest.TestCase):
             datasets.append("datasets/uncompressed")
         if corrupt:
             datasets.append("corrupt")
-        if missing:
+        if missing_data:
             datasets.append("missing_data")
+        if missing_metadata:
+            datasets.append("missing_metadata")
         if duplicates:
             datasets.append("duplicates")
         for dataset in datasets:
             dest = temp_dir_path / ("" if flatten else dataset)
             shutil.copytree(cls.TEST_DATA_DIR / dataset, dest, dirs_exist_ok=True)
 
-    def test_corrupt_and_missing_files(self):
+    def test_corrupt_metadata_and_missing_data_files(self):
         """
         Corrupt market catalogues and missing market data files do not break indexing.
         The events and offending file names are logged as errors.
@@ -106,6 +109,33 @@ class TestBetfairDatabase(unittest.TestCase):
                 "Corrupt: 1",
                 "No data: 1",
                 "No metadata: 0",
+            ]
+            for expected, actual in zip(expected_messages, info_messages, strict=True):
+                self.assertEqual(expected, actual)
+
+    def test_missing_metadata(self):
+        """
+        Tests processing self-recorded and official historical stream files
+        which lack a market catalogue.
+        """
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            self.assertLogs(level=logging.INFO) as logs,
+        ):
+            self.create_test_dataset(tmpdir, missing_metadata=True)
+            database = BetfairDatabase(tmpdir)
+            database.index()
+
+            # Check summary
+            info_messages = [
+                r.message for r in logs.records if r.levelno == logging.INFO
+            ]
+            expected_messages = [
+                "Finished indexing 6 markets.",
+                "Added: 4",
+                "Corrupt: 1",
+                "No data: 0",
+                "No metadata: 1",
             ]
             for expected, actual in zip(expected_messages, info_messages, strict=True):
                 self.assertEqual(expected, actual)

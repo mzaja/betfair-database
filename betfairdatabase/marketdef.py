@@ -119,7 +119,7 @@ class MarketDefinitionProcessor:
                 line = read_last_line_in_a_text_file(f)
                 if MARKET_DEFINITION_BYTES not in line:
                     f.seek(0, SEEK_SET)  # Move back to the beginning of the file
-                    line = self._find_last_market_definition_line(f)
+                    line = self._find_last_market_definition_line(f.readlines())
 
         if line is None:
             raise MarketDefinitionMissingError(market_data_file)

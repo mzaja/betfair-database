@@ -30,11 +30,15 @@ Contains a mixture of duplicate market data and market metadata files already co
 A lone market catalogue without a matching market data file.
 
 ## missing_metadata
-Contains a mixture of self-recorded and official Betfair historical market stream files without metadata. All supported file types are included.
+Contains a mixture of self-recorded and official Betfair historical market stream files without metadata. All supported file types are included. There are two special files in the dataset:
+ - `1.209492553` is a self-recorded market stream file without a market definition inside.
+ - `1.223716890` is a corrupt file with unparsable JSON, but does contain `"marketDefinition"` inside.
 
 | Name            | Source   | Sport      | Lines |
 |-----------------|----------|------------|-------|
 | 1.197931750.gz  | Recorded | Greyhounds | 10    |
-| 1.214555872.bz2 | Official | Tennis     | 53    |
+| 1.209492553     | Recorded | ???        | 18    |
+| 1.214555872.bz2 | Official | Greyhounds | 53    |
 | 1.219107753.zip | Recorded | Greyhounds | 29    |
-| 1.223716981     | Official | Greyhounds | 19    |
+| 1.223716890     | Official | Tennis     |  1    |
+| 1.223716981     | Official | Tennis     | 19    |

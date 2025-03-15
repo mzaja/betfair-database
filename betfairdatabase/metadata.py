@@ -67,7 +67,7 @@ class MarketMetadata(dict):
             )
         if settled_time:
             data["localMarketSettledTime"] = str(
-                parse_datetime(event_open_date).astimezone(time_zone)
+                parse_datetime(settled_time).astimezone(time_zone)
             )
         return data
 

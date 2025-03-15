@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest import mock
 
 from betfairdatabase.market import Market, MarketCatalogueData, MarketDefinitionData
+from betfairdatabase.metadata import MarketMetadata
 from betfairdatabase.racing import (
     METERS_PER_FURLONG,
     RacingDataProcessor,
@@ -90,11 +91,29 @@ class TestRacing(unittest.TestCase):
                 "marketStartTime": market_start_time,
             }
         )
-        race_id = RacingDataProcessor.make_race_id(market_catalogue_data)
-        self.assertIn(event_type_id, race_id)
-        self.assertIn(county_code, race_id)
-        self.assertIn(venue, race_id)
-        self.assertIn(market_start_time, race_id)
+        market_definition_data = MarketDefinitionData(
+            {
+                "eventTypeId": event_type_id,
+                "countryCode": county_code,
+                "venue": venue,
+                "marketTime": market_start_time,
+            }
+        )
+        for metadata in [market_catalogue_data, market_definition_data]:
+            race_id = RacingDataProcessor.make_race_id(metadata)
+            self.assertIn(event_type_id, race_id)
+            self.assertIn(county_code, race_id)
+            self.assertIn(venue, race_id)
+            self.assertIn(market_start_time, race_id)
+
+    def test_make_race_id_raises_type_error(self):
+        """
+        TypeError is raised unless the input parameter is an instance of
+        MarketCatalogueData or MarketDefinitionData. Plain dict or a subclass does not work.
+        """
+        for arg in [{}, MarketMetadata()]:
+            with self.assertRaises(TypeError):
+                RacingDataProcessor.make_race_id(arg)
 
     def test_racing_data_processor(self):
         """Tests the racing data processor."""

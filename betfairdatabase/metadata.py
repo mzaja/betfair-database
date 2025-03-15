@@ -122,6 +122,7 @@ class MarketDefinitionData(MarketMetadata):
     # Format is: (original_name, new_name)
     FIELDS_TO_RENAME = (
         ("name", "marketName"),
+        ("marketTime", "marketStartTime"),
         ("openDate", "eventOpenDate"),
         ("timezone", "eventTimezone"),
         # Entries below are not always provided

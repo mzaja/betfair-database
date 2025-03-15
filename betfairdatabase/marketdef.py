@@ -1,8 +1,11 @@
 import json
 from bz2 import BZ2File
+from contextlib import contextmanager
+from gzip import GzipFile
 from io import BufferedReader
 from os import SEEK_CUR, SEEK_END, SEEK_SET
 from pathlib import Path
+from zipfile import ZipFile
 
 from betfairdatabase.const import ENCODING_UTF_8
 from betfairdatabase.exceptions import MarketDefinitionMissingError
@@ -58,32 +61,41 @@ def read_last_line_in_a_text_file(file_reader: BufferedReader) -> bytes:
         file_reader.seek(-read_step, SEEK_CUR)
 
 
+# ---------------------------------------------------------------------------
+# CLASSES
+# ---------------------------------------------------------------------------
+@contextmanager
+def ZipFileWrapper(market_data_file: Path):
+    """Context manager to open a ZIP-compressed market data file."""
+    with ZipFile(market_data_file, "r") as zf:
+        with zf.open(market_data_file.stem) as f:
+            yield f
+
+
 class MarketDefinitionProcessor:
     """
     Extracts market definitions from market data files and stores them in a JSON file.
     """
 
     # Store supported decompressors in this dict
-    DECOMPRESSORS = {".bz2": BZ2File}
+    DECOMPRESSORS = {".bz2": BZ2File, ".gz": GzipFile, ".zip": ZipFileWrapper}
 
     def __init__(self, cache_parsed_definitions: bool):
         self.cache_parsed_definitions = cache_parsed_definitions
         self.parsed_definitions = {}
 
     @staticmethod
-    def _find_last_market_definition_line(
-        file_reader: BufferedReader | BZ2File,
-    ) -> bytes:
+    def _find_last_market_definition_line(lines: list[bytes]) -> bytes | None:
         """
         Finds the last market definition in a file by reading it wholly and iterating
         backwards from the end of the file until the market definition is encountered.
 
         Raises MarketDefinitionMissingError if the market definition is not found.
         """
-        for line in reversed(file_reader.readlines()):
+        for line in reversed(lines):
             if MARKET_DEFINITION_BYTES in line:
                 return line
-        raise MarketDefinitionMissingError(file_reader.name)
+        return None
 
     def parse_market_definition(self, market_data_file: Path) -> dict:
         """
@@ -95,10 +107,11 @@ class MarketDefinitionProcessor:
 
         Raises MarketDefinitionMissingError if the market definition is not found.
         """
+        line = None
         decompressor = self.DECOMPRESSORS.get(market_data_file.suffix, None)
         if decompressor is not None:
             with decompressor(market_data_file) as f:
-                line = self._find_last_market_definition_line(f)
+                line = self._find_last_market_definition_line(f.readlines())
         else:
             # With plaintext files, try the shortcut of reading the last line first.
             # If that does not locate the market definition, read and search the whole file.
@@ -108,6 +121,8 @@ class MarketDefinitionProcessor:
                     f.seek(0, SEEK_SET)  # Move back to the beginning of the file
                     line = self._find_last_market_definition_line(f)
 
+        if line is None:
+            raise MarketDefinitionMissingError(market_data_file)
         # Parse data, inject market ID and return the correct dict sub-class
         market_change_message = json.loads(line)["mc"][0]
         market_definition = market_change_message[MARKET_DEFINITION]

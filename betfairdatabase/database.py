@@ -231,7 +231,7 @@ class MarketFileProcessor(ProgressBarMixin):
         if metadata_files_without_data:
             logger.error(
                 "Missing market data file for metadata files: %s",
-                [f"'{p}'" for p in metadata_files_without_data.values()],
+                [str(p) for p in metadata_files_without_data.values()],
             )
             for key in metadata_files_without_data:
                 # Delete all metadata files without a corresponding data file

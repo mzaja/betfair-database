@@ -63,7 +63,7 @@ class Market:
         metadata = self._attached_metadata or json.loads(
             self.market_metadata_file.read_text(encoding=ENCODING_UTF_8),
         )
-        if "name" in metadata:  # Called "marketName" in a market catalogue
+        if "numberOfWinners" in metadata:  # Market definition specific field
             return MarketDefinitionData(metadata)
         return MarketCatalogueData(metadata)
 

@@ -2,13 +2,13 @@ import json
 from bz2 import BZ2File
 from contextlib import contextmanager
 from gzip import GzipFile
-from io import BufferedReader
-from os import SEEK_CUR, SEEK_END, SEEK_SET
+from os import SEEK_SET
 from pathlib import Path
 from zipfile import ZipFile
 
 from betfairdatabase.const import ENCODING_UTF_8
 from betfairdatabase.exceptions import MarketDefinitionMissingError
+from betfairdatabase.utils import read_last_line_in_a_file
 
 # ---------------------------------------------------------------------------
 # CONSTANTS
@@ -16,49 +16,6 @@ from betfairdatabase.exceptions import MarketDefinitionMissingError
 MARKET_DEFINITION = "marketDefinition"
 MARKET_DEFINITION_BYTES = MARKET_DEFINITION.encode()
 JSON_SEPARATORS = (",", ":")  # Eliminate unnecessary whitespace
-REVERSE_READ_STEP = 64 * 1024  # Characters to start reading a file from reverse
-
-
-# ---------------------------------------------------------------------------
-# FUNCTIONS
-# ---------------------------------------------------------------------------
-def read_last_line_in_a_text_file(file_reader: BufferedReader) -> bytes:
-    """
-    Reads the last line in a text file by jumping to the end of the file and
-    moving backwards in steps of 64 KiB. This size should be sufficient to immediately
-    locate the last line in the vast majority of Betfair stream files. However, in
-    exceptional cases where this is not sufficient, the window keeps moving backwards
-    until the beginning of the line is found.
-
-    The function does not work on compressed files because they cannot be incrementally
-    decompressed from the rear. f.seek() in compressed files only works by sequentially
-    decompressing the file up until that point, defeating the prupose of jumping to the
-    back. For compressed files, it is faster and cleaner to simply decompress the whole
-    file and read the lines in reverse.
-    """
-    buffer = b""
-    file_reader.seek(0, SEEK_END)  # Go to the end of the file
-    while True:
-        bytes_from_beginning = file_reader.tell()
-        if bytes_from_beginning > REVERSE_READ_STEP:
-            read_step = REVERSE_READ_STEP
-            whole_file = False
-        else:
-            read_step = bytes_from_beginning
-            whole_file = True
-        # Move back by the step size, then read that many bytes
-        file_reader.seek(-read_step, SEEK_CUR)
-        buffer = file_reader.read(read_step) + buffer
-        try:
-            # If a newline is detected in the buffer, select and return the last line.
-            # Ignore the last element in the buffer search in case it is a newline.
-            return buffer[buffer[:-1].rindex(b"\n") + 1 :]
-        except ValueError:
-            # End up here whenever a newline is not found in the buffer.
-            if whole_file:
-                return buffer
-        # Roll back the head to undo the last read
-        file_reader.seek(-read_step, SEEK_CUR)
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +73,7 @@ class MarketDefinitionProcessor:
             # With plaintext files, try the shortcut of reading the last line first.
             # If that does not locate the market definition, read and search the whole file.
             with open(market_data_file, "rb") as f:
-                line = read_last_line_in_a_text_file(f)
+                line = read_last_line_in_a_file(f)
                 if MARKET_DEFINITION_BYTES not in line:
                     f.seek(0, SEEK_SET)  # Move back to the beginning of the file
                     line = self._find_last_market_definition_line(f.readlines())
@@ -141,7 +98,11 @@ class MarketDefinitionProcessor:
         unless overwrite=True is provided.
         """
         # This method will generally not be called with an existing market catalogue
-        output_file = market_data_file.with_suffix(".json")
+        output_file = (
+            market_data_file.with_suffix(".json")
+            if len(market_data_file.suffixes) == 2
+            else (market_data_file.with_suffix(market_data_file.suffix + ".json"))
+        )
         if overwrite or not output_file.exists():
             metadata = self.parse_market_definition(market_data_file)
             if self.cache_parsed_definitions:

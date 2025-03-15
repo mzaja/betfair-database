@@ -6,7 +6,11 @@ from collections import Counter
 from pathlib import Path
 
 import betfairdatabase as bfdb
-from betfairdatabase.const import INDEX_FILENAME
+from betfairdatabase.const import (
+    INDEX_FILENAME,
+    MARKET_DATA_FILE_PATH,
+    MARKET_METADATA_FILE_PATH,
+)
 from betfairdatabase.exceptions import (
     DatabaseDirectoryError,
     IndexExistsError,
@@ -131,9 +135,13 @@ class TestIntegrationPart1(TestIntegrationBase):
         # Check that paths to files are absolute and correct.
         for market in markets:
             self.assertIn(
-                Path(market["marketMetadataFilePath"]), imported_metadata_files
+                path := Path(market[MARKET_METADATA_FILE_PATH]), imported_metadata_files
             )
-            self.assertIn(Path(market["marketDataFilePath"]), self.data_source_files)
+            self.assertTrue(path.is_absolute())
+            self.assertIn(
+                path := Path(market[MARKET_DATA_FILE_PATH]), self.data_source_files
+            )
+            self.assertTrue(path.is_absolute())
 
         # Check counts of values
         self.check_value_counts(
@@ -198,6 +206,8 @@ class TestIntegrationPart1(TestIntegrationBase):
         self.check_value_counts(
             markets, "eventCountryCode", {"GB": 7, "AU": 2, "FR": 1, "BG": 1, None: 3}
         )
+        # Market definition-exclusive field
+        self.check_value_counts(markets, "numberOfWinners", {1: 4, 5: 1, None: 9})
 
         # Value counts for additional metadata
         self.check_value_counts(

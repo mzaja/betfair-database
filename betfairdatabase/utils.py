@@ -1,56 +1,67 @@
 import datetime as dt
+from io import BufferedReader
+from os import SEEK_CUR, SEEK_END, SEEK_SET
 from zoneinfo import ZoneInfo
 
+# ---------------------------------------------------------------------------
+# CONSTANTS
+# ---------------------------------------------------------------------------
+REVERSE_READ_STEP = 64 * 1024  # Characters to start reading a file from reverse
 
+
+# ---------------------------------------------------------------------------
+# FUNCTIONS
+# ---------------------------------------------------------------------------
 def parse_datetime(datetime_str: str) -> dt.datetime:
     """
     Parses Betfair's ISO 8601 datetime format.
-
     Returns a timezone-aware datetime object.
     """
     try:
         # Python >= 3.11 parses timezone
         return dt.datetime.fromisoformat(datetime_str)
     except ValueError:
-        # Python 3.10 does not, so remove "Zulu" time marker from the end annd
+        # Python 3.10 does not, so remove "Zulu" time marker from the end and
         # manually add the timezone
         return dt.datetime.fromisoformat(datetime_str.replace("Z", "")).replace(
             tzinfo=ZoneInfo("UTC")
         )
 
 
-class ImportPatterns:
+def read_last_line_in_a_file(file_reader: BufferedReader) -> bytes:
     """
-    Contains patterns for mapping market catalogue data to the output
-    directory path in the database.
+    Reads the last line in a (text) file by jumping to the end of the file and
+    moving backwards in steps of 64 KiB. This size should be sufficient to immediately
+    locate the last line in the vast majority of Betfair stream files. However, in
+    exceptional cases where this is not sufficient, the window keeps moving backwards
+    until the beginning of the line is found.
+
+    The function does not work on compressed files because they cannot be incrementally
+    decompressed from the rear. f.seek() in compressed files only works by sequentially
+    decompressing the file up until that point, defeating the prupose of jumping to the
+    back. For compressed files, it is faster and cleaner to simply decompress the whole
+    file and read the lines in reverse.
     """
-
-    @staticmethod
-    def betfair_historical(market_catalogue_data: dict) -> str:
-        """
-        Generates the output directory path using the pattern
-        "{year_no}/{month_name}/{day_no}/{event_id}"
-        e.g. "2022/Jun/06/3828473", where reference time is "marketStartTime".
-        This pattern is how official Betfair historical data files are organised.
-
-        NOTE:
-        The actual naming pattern Betfair uses is slightly different as the reference
-        time is the event end time, rather than the market start time.
-        If an event takes place across 4th and 5th of February 2022, all markets will
-        be stored inside "2022/Feb/5/{event_id}", rather than a split of ".../Feb/4/..."
-        and ".../Feb/5/...". However, since the event end time is not a part of the
-        market catalogue, it is impossible to fully recreate this pattern.
-        """
-        market_time = parse_datetime(market_catalogue_data["marketStartTime"])
-        event_id = market_catalogue_data["event"]["id"]
-        return market_time.strftime(f"%Y/%b/{market_time.day}/{event_id}")
-
-    @staticmethod
-    def event_id(market_catalogue_data: dict) -> str:
-        """Market data is stored into directories named after event ids."""
-        return market_catalogue_data["event"]["id"]
-
-    @staticmethod
-    def flat(market_catalogue_data: dict) -> str:
-        """Market data is stored directly into the base directory."""
-        return ""
+    buffer = b""
+    file_reader.seek(0, SEEK_END)  # Go to the end of the file
+    while True:
+        bytes_from_beginning = file_reader.tell()
+        if bytes_from_beginning > REVERSE_READ_STEP:
+            read_step = REVERSE_READ_STEP
+            whole_file = False
+        else:
+            read_step = bytes_from_beginning
+            whole_file = True
+        # Move back by the step size, then read that many bytes
+        file_reader.seek(-read_step, SEEK_CUR)
+        buffer = file_reader.read(read_step) + buffer
+        try:
+            # If a newline is detected in the buffer, select and return the last line.
+            # Ignore the last element in the buffer search in case it is a newline.
+            return buffer[buffer[:-1].rindex(b"\n") + 1 :]
+        except ValueError:
+            # End up here whenever a newline is not found in the buffer.
+            if whole_file:
+                return buffer
+        # Roll back the head to undo the last read
+        file_reader.seek(-read_step, SEEK_CUR)

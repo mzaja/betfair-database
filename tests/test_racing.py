@@ -2,7 +2,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from betfairdatabase.market import Market
+from betfairdatabase.market import Market, MarketCatalogueData, MarketDefinitionData
+from betfairdatabase.metadata import MarketMetadata
 from betfairdatabase.racing import (
     METERS_PER_FURLONG,
     RacingDataProcessor,
@@ -10,6 +11,12 @@ from betfairdatabase.racing import (
 )
 
 TEST_DATA_DIR = Path("./tests/data/datasets")
+WIN_MARKET_CATALOGUE = TEST_DATA_DIR / "zip-lzma/1.197931750.json"
+WIN_MARKET_DATA = WIN_MARKET_CATALOGUE.with_suffix(".zip")
+PLACE_MARKET_CATALOGUE = TEST_DATA_DIR / "zip-lzma/1.197931751.json"
+PLACE_MARKET_DATA = PLACE_MARKET_CATALOGUE.with_suffix(".zip")
+NON_RACING_MARKET_CATALOGUE = TEST_DATA_DIR / "uncompressed/1.216418252.json"
+NON_RACING_MARKET_DATA = NON_RACING_MARKET_CATALOGUE.with_suffix("")
 
 # WIN market names for extracing race metadata
 # UK, IRE, USA events
@@ -77,25 +84,44 @@ class TestRacing(unittest.TestCase):
         county_code = "GB"
         venue = "Newcastle"
         market_start_time = "2022-04-19T17:19:00.000Z"
-        market_catalogue_data = {
-            "eventType": {"id": event_type_id},
-            "event": {"countryCode": county_code, "venue": venue},
-            "marketStartTime": market_start_time,
-        }
-        race_id = RacingDataProcessor.make_race_id(market_catalogue_data)
-        self.assertIn(event_type_id, race_id)
-        self.assertIn(county_code, race_id)
-        self.assertIn(venue, race_id)
-        self.assertIn(market_start_time, race_id)
+        market_catalogue_data = MarketCatalogueData(
+            {
+                "eventType": {"id": event_type_id},
+                "event": {"countryCode": county_code, "venue": venue},
+                "marketStartTime": market_start_time,
+            }
+        )
+        market_definition_data = MarketDefinitionData(
+            {
+                "eventTypeId": event_type_id,
+                "countryCode": county_code,
+                "venue": venue,
+                "marketTime": market_start_time,
+            }
+        )
+        for metadata in [market_catalogue_data, market_definition_data]:
+            race_id = RacingDataProcessor.make_race_id(metadata)
+            self.assertIn(event_type_id, race_id)
+            self.assertIn(county_code, race_id)
+            self.assertIn(venue, race_id)
+            self.assertIn(market_start_time, race_id)
+
+    def test_make_race_id_raises_type_error(self):
+        """
+        TypeError is raised unless the input parameter is an instance of
+        MarketCatalogueData or MarketDefinitionData. Plain dict or a subclass does not work.
+        """
+        for arg in [{}, MarketMetadata()]:
+            with self.assertRaises(TypeError):
+                RacingDataProcessor.make_race_id(arg)
 
     def test_racing_data_processor(self):
         """Tests the racing data processor."""
-        win_market = Market(TEST_DATA_DIR / "zip-lzma/1.197931750.json")
-        place_market = Market(TEST_DATA_DIR / "zip-lzma/1.197931751.json")
-        non_racing_market = Market(TEST_DATA_DIR / "uncompressed/1.216418252.json")
-        markets = (win_market, place_market, non_racing_market)
+        win_market = Market(WIN_MARKET_CATALOGUE, WIN_MARKET_DATA)
+        place_market = Market(PLACE_MARKET_CATALOGUE, PLACE_MARKET_DATA)
+        non_racing_market = Market(NON_RACING_MARKET_CATALOGUE, NON_RACING_MARKET_DATA)
         proc = RacingDataProcessor()
-        for market in markets:
+        for market in (win_market, place_market, non_racing_market):
             proc.add(market)  # No exception should be raised
         metadata = proc.get(win_market)
         self.assertEqual(len(metadata), 4)  # Not empty
@@ -106,14 +132,17 @@ class TestRacing(unittest.TestCase):
         self.assertEqual(metadata["raceTypeFromName"], "OR")
         self.assertIsNone(proc.get(non_racing_market))  # No exception raised
 
-    def test_racing_data_processor_incomplete_market_catalogue(self):
-        """
-        Incomplete or defective market catalogue must not raise an exception.
-        """
-        mock_market = mock.Mock()
-        mock_market.market_catalogue_data = {}
-        mock_market.racing = True
-        proc = RacingDataProcessor()
-        # Test passes if no exceptions are raised
-        proc.add(mock_market)
-        proc.get(mock_market)
+    def test_racing_data_processor_incomplete_market_metadata(self):
+        """Incomplete or defective market catalogue must not raise an exception."""
+        for metadata in [MarketCatalogueData(), MarketDefinitionData()]:
+            with self.subTest(metadata_type=type(metadata)):
+                mock_market = mock.Mock(
+                    # Paths are irrelevant here since metadata is mocked
+                    spec_set=Market(WIN_MARKET_CATALOGUE, WIN_MARKET_DATA)
+                )
+                mock_market.metadata = metadata
+                mock_market.racing = True
+                proc = RacingDataProcessor()
+                # Test passes if no exceptions are raised
+                proc.add(mock_market)
+                proc.get(mock_market)

@@ -7,13 +7,13 @@ from unittest import mock
 
 from betfairdatabase import BetfairDatabase
 from betfairdatabase.const import DuplicatePolicy
-from betfairdatabase.database import logger
-from betfairdatabase.utils import ImportPatterns
+from betfairdatabase.database import Counters, logger
+from betfairdatabase.imports import ImportPatterns
 
 
 class TestBetfairDatabase(unittest.TestCase):
     """
-    Additional tests for BetfairDatabase class which
+    Additional tests for BetfairDatabase class and its helper classes which
     are not covered by integration tests.
     """
 
@@ -38,7 +38,8 @@ class TestBetfairDatabase(unittest.TestCase):
         compressed: bool = False,
         uncompressed: bool = False,
         corrupt: bool = False,
-        missing: bool = False,
+        missing_data: bool = False,
+        missing_metadata: bool = False,
         duplicates: bool = False,
     ) -> tempfile.TemporaryDirectory:
         """Cretes a test dataset by copying source data into the temporary directory."""
@@ -50,15 +51,17 @@ class TestBetfairDatabase(unittest.TestCase):
             datasets.append("datasets/uncompressed")
         if corrupt:
             datasets.append("corrupt")
-        if missing:
+        if missing_data:
             datasets.append("missing_data")
+        if missing_metadata:
+            datasets.append("missing_metadata")
         if duplicates:
             datasets.append("duplicates")
         for dataset in datasets:
             dest = temp_dir_path / ("" if flatten else dataset)
             shutil.copytree(cls.TEST_DATA_DIR / dataset, dest, dirs_exist_ok=True)
 
-    def test_corrupt_and_missing_files(self):
+    def test_corrupt_metadata_and_missing_data_files(self):
         """
         Corrupt market catalogues and missing market data files do not break indexing.
         The events and offending file names are logged as errors.
@@ -104,7 +107,51 @@ class TestBetfairDatabase(unittest.TestCase):
                 "Finished indexing 7 markets.",
                 "Added: 5",
                 "Corrupt: 1",
-                "Incomplete: 1",
+                "No data: 1",
+                "No metadata: 0",
+            ]
+            for expected, actual in zip(expected_messages, info_messages, strict=True):
+                self.assertEqual(expected, actual)
+
+    def test_missing_metadata(self):
+        """
+        Tests processing self-recorded and official historical stream files
+        which lack a market catalogue. Metadata file is generated from the market
+        definition wherever possible.
+        """
+        # Set logging level to DEBUG to hit an otherwise uncovered line (print names of
+        # created metadata files), but inspecting the log messages is not necessary.
+        logger.setLevel(level=logging.DEBUG)
+        IMPORTABLE_MARKETS_COUNT = 4
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            self.assertLogs(level=logging.INFO) as logs,
+        ):
+            self.create_test_dataset(tmpdir, missing_metadata=True, flatten=True)
+            database = BetfairDatabase(tmpdir)
+            database.index()
+
+            # Check that the expected number of metadata files has been created and imported
+            metadata_files = list(Path(tmpdir).glob("1.*.json"))
+            self.assertEqual(len(metadata_files), IMPORTABLE_MARKETS_COUNT)
+            markets = database.select()
+            self.assertEqual(len(markets), IMPORTABLE_MARKETS_COUNT)
+
+            # Verify that the correct markets have (not) been imported
+            imported_market_ids = {m["marketId"] for m in markets}
+            self.assertNotIn("1.209492553", imported_market_ids)  # No market definition
+            self.assertNotIn("1.223716890", imported_market_ids)  # Corrupt, unparsable
+
+            # Check summary
+            info_messages = [
+                r.message for r in logs.records if r.levelno == logging.INFO
+            ]
+            expected_messages = [
+                "Finished indexing 6 markets.",
+                "Added: 4",
+                "Corrupt: 1",
+                "No data: 0",
+                "No metadata: 1",
             ]
             for expected, actual in zip(expected_messages, info_messages, strict=True):
                 self.assertEqual(expected, actual)
@@ -148,7 +195,8 @@ class TestBetfairDatabase(unittest.TestCase):
                     "Finished indexing 4 markets.",
                     "Added: 4",
                     "Corrupt: 0",
-                    "Incomplete: 0",
+                    "No data: 0",
+                    "No metadata: 0",
                 ]
                 for expected, actual in zip(
                     expected_messages, info_messages, strict=True
@@ -192,7 +240,8 @@ class TestBetfairDatabase(unittest.TestCase):
                     "Updated: 0",
                     "Skipped: 1",
                     "Corrupt: 0",
-                    "Incomplete: 0",
+                    "No data: 0",
+                    "No metadata: 0",
                 ]
                 for expected, actual in zip(
                     expected_messages, info_messages, strict=True
@@ -225,7 +274,8 @@ class TestBetfairDatabase(unittest.TestCase):
                     "Updated: 3",
                     "Skipped: 0",
                     "Corrupt: 0",
-                    "Incomplete: 0",
+                    "No data: 0",
+                    "No metadata: 0",
                 ]
                 for expected, actual in zip(
                     expected_messages, info_messages, strict=True
@@ -282,3 +332,44 @@ class TestBetfairDatabase(unittest.TestCase):
                             mock_tqdm.assert_called()
                         else:
                             mock_tqdm.assert_not_called()
+
+    def test_counters_init(self):
+        """Tests that all components of Counters instance are set to zero on init."""
+        counters = Counters()
+        self.assertEqual(len(counters.__slots__), 7)  # Sanity check
+        for attr in counters.__slots__:
+            self.assertEqual(getattr(counters, attr), 0)
+        self.assertEqual(counters.markets_added, 0)  # Test property
+        self.assertTrue(counters.validate())  # Validation passes
+
+    def test_counters_do_not_add_up(self):
+        """An error is logged if the counters for database insert/import statics do not add up."""
+        ACTION = "importing"
+
+        # Check default values, when everything should be set to zero
+        counters = Counters()
+        self.assertTrue(counters.validate())
+        with self.assertNoLogs(level=logging.ERROR):
+            counters.log_info(ACTION)
+
+        # Check with valid non-default values
+        # imported markets
+        counters.rows_inserted = 3  # Added + updated markets
+        counters.markets_updated = 1
+        # Markets not imported
+        counters.markets_without_data = 1
+        counters.markets_without_metadata = 1
+        counters.corrupt_files = 1
+        counters.markets_skipped = 1  # Skipped due to import policy
+        # Total
+        counters.total_markets = 7  # Markets imported + markets not imported
+        self.assertEqual(counters.markets_added, 2)
+        self.assertTrue(counters.validate())
+        with self.assertNoLogs(level=logging.ERROR):
+            counters.log_info(ACTION)
+
+        # Check with invalid non-default values
+        counters.total_markets = 99
+        self.assertFalse(counters.validate())
+        with self.assertLogs(level=logging.ERROR):
+            counters.log_info(ACTION)

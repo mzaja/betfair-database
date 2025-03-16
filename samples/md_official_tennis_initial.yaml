@@ -1,4 +1,6 @@
 # Initial market definition of a tennis market.
+# This is an unprocessed part of the market change message ("mc"), where market ID
+# is placed outside of the market definition.
 
 {
     "id": "1.223716981",

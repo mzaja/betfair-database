@@ -5,3 +5,5 @@ command_line = -m unittest discover --start-directory tests --buffer
 
 [report]
 fail_under = 100
+# Minus prefix is for descending order
+sort = -miss

@@ -8,7 +8,7 @@ from betfairdatabase.exceptions import (
     IndexExistsError,
     IndexMissingError,
 )
-from betfairdatabase.utils import ImportPatterns
+from betfairdatabase.imports import ImportPatterns
 
 IMPORT_PATTERNS = ("betfair_historical", "event_id", "flat")
 ON_DUPLICATES = ("skip", "replace", "update")
@@ -94,7 +94,7 @@ def get_parser() -> ArgumentParser:
     # Sub-parser for insert command
     parser_insert = subparsers.add_parser(
         "insert",
-        description="Inserts market catalogue/data files from source_dir into the database.",
+        description="Inserts market metadata and data files from source_dir into the database.",
     )
     parser_insert.add_argument(
         "database_dir",

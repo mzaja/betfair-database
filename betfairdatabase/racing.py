@@ -1,6 +1,6 @@
 import re
 
-from betfairdatabase.market import Market
+from betfairdatabase.market import Market, MarketCatalogueData, MarketDefinitionData
 
 # ---------------------------------------------------------------------------
 # CONST
@@ -84,45 +84,71 @@ class RacingDataProcessor:
         self._race_metadata_lookup = {}
 
     @staticmethod
-    def make_race_id(market_catalogue_data: dict) -> str:
+    def make_race_id(
+        market_metadata: MarketCatalogueData | MarketDefinitionData,
+    ) -> str:
         """Creates an unambiguous lookup for individual races."""
-        return ",".join(
-            (
-                market_catalogue_data["eventType"]["id"],
-                market_catalogue_data["event"]["countryCode"],
-                market_catalogue_data["event"]["venue"],
-                market_catalogue_data["marketStartTime"],
+        data_type = type(market_metadata)
+        if data_type == MarketCatalogueData:
+            return ",".join(
+                (
+                    market_metadata["eventType"]["id"],
+                    market_metadata["event"]["countryCode"],
+                    market_metadata["event"]["venue"],
+                    market_metadata["marketStartTime"],
+                )
             )
-        )
+        elif data_type == MarketDefinitionData:
+            return ",".join(
+                (
+                    market_metadata["eventTypeId"],
+                    market_metadata["countryCode"],
+                    market_metadata["venue"],
+                    market_metadata["marketTime"],
+                )
+            )
+        else:
+            raise TypeError(
+                "market_metadata argument must be of type MarketCatalogueData or MarketDefinitionData."
+            )
 
-    def add(self, market: Market):
-        """Adds and processes market catalogue data."""
+    def add(self, market: Market) -> None:
+        """Processes market metadata and stores the additional racing metadata into the cache."""
         if market.racing:
             try:
-                market_catalogue_data = market.market_catalogue_data
-                if market_catalogue_data["description"]["marketType"] == WIN:
-                    self._race_metadata_lookup[
-                        self.make_race_id(market_catalogue_data)
-                    ] = extract_race_metadata(market_catalogue_data["marketName"])
+                metadata = market.metadata
+                if (
+                    isinstance(metadata, MarketCatalogueData)
+                    and metadata["description"]["marketType"] == WIN
+                ):
+                    self._race_metadata_lookup[self.make_race_id(metadata)] = (
+                        extract_race_metadata(metadata["marketName"])
+                    )
+                elif (
+                    isinstance(metadata, MarketDefinitionData)
+                    and metadata["marketType"] == WIN
+                ):
+                    self._race_metadata_lookup[self.make_race_id(metadata)] = (
+                        extract_race_metadata(metadata["name"])
+                    )
             except KeyError:
-                # Incomplete or unsuitable market catalogue
-                return
+                # Incomplete or unsuitable market metadata
+                pass
 
     def get(self, market: Market) -> dict | None:
         """
-        Retrieves the racing metadata for the provided market catalogue.
-
-        If metadata cannot be retrieved, returns None.
+        Retrieves the racing metadata for the provided Market object.
+        If racing metadata cannot be retrieved, returns None.
         """
         if market.racing:
             try:
                 metadata = self._race_metadata_lookup[
-                    race_id := self.make_race_id(market.market_catalogue_data)
+                    race_id := self.make_race_id(market.metadata)
                 ]
                 metadata["raceId"] = race_id
                 return metadata
             except KeyError:
-                # Unsuitable market catalogue
-                # Also raised by make_race_id() if race_id cannot be constructed
+                # No racing metadata exists in the cache for this market, or
+                # a valid race ID cannot be constructed by make_race_id().
                 pass
         return None  # More efficient than creating an empty dict thousands of times

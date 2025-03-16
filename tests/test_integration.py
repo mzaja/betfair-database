@@ -143,6 +143,11 @@ class TestIntegrationPart1(TestIntegrationBase):
             )
             self.assertTrue(path.is_absolute())
 
+        # Check that "marketTime" is aliased to "marketStartTime" in official data.
+        # This is already the case in (self-recorded) market catalogues.
+        for market in markets:
+            self.assertEqual(market["marketTime"], market["marketStartTime"])
+
         # Check counts of values
         self.check_value_counts(
             markets, "eventTypeId", {"1": 3, "2": 1, "3": 1, "4": 2, "7": 3, "4339": 4}

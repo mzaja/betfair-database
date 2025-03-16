@@ -122,7 +122,6 @@ class MarketDefinitionData(MarketMetadata):
     # Format is: (original_name, new_name)
     FIELDS_TO_RENAME = (
         ("name", "marketName"),
-        ("marketTime", "marketStartTime"),
         ("openDate", "eventOpenDate"),
         ("timezone", "eventTimezone"),
         # Entries below are not always provided
@@ -143,6 +142,9 @@ class MarketDefinitionData(MarketMetadata):
                 data.get("settledTime"),
             )
         )
+
+        # Create an alias so that the data matches transformed market catalogues
+        data["marketStartTime"] = data["marketTime"]
 
         # Remove full runner definitions, replace with a number of runners
         data["runners"] = len(data.pop("runners"))

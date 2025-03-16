@@ -1,13 +1,11 @@
 # IDE
 .vscode/
 
-# Auto-generated files
-.betfairdatabase*
-
-# Throwaway files
+# Working directories and files
 scratchpad*
-data.csv
-data.json
+temp/
+benchmark/
+specs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,5 +1,11 @@
 # Release History
 
+## 1.3.0 (2025-03-16)
+### Improvements
+- Supports indexing official historical Betfair data, both free and purchased.
+- Market metadata file is created from the market data file's market catalogue if a market catalogue file is missing. `marketCatalogueFilePath` field is renamed to `marketMetadataFilePath` to reflect this change.
+- New fields added: `numberOfWinners`, `marketSettledTime` and `localMarketSettledTime`. Reindex the database to upgrade it to the new format.
+
 ## 1.2.0 (2025-02-23)
 ### Deprecations
 - Short command line option for retrieving the tool version has been changed from `-v` to `-V` (lowercase to uppecase). The lowercase version continues to be supported, but will be removed in the future.

@@ -1,5 +1,9 @@
 # Release History
 
+## 1.3.1 (2025-03-16)
+### Bug fixes
+- Field `marketTime` is aliased to `marketStartTime` in processed market definitions, rather than renamed.
+
 ## 1.3.0 (2025-03-16)
 ### Improvements
 - Supports indexing official historical Betfair data, both free and purchased.

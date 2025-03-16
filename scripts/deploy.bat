@@ -13,7 +13,7 @@
 @REM Check history, commit, tag the release and push to remote
 @REM =========================================================
 @REM Set release version here:
-SET RELEASE_VERSION=1.3.0
+SET RELEASE_VERSION=1.3.1
 
 @REM Ensure on the main branch
 FOR /F "tokens=*" %%i IN ('git branch --show-current') DO SET CURRENT_BRANCH=%%i

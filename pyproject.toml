@@ -32,6 +32,7 @@ dependencies = ["tqdm>=4.1.0"]
 [project.urls]
 "Homepage" = "https://github.com/mzaja/betfair-database"
 "Bug Tracker" = "https://github.com/mzaja/betfair-database/issues"
+"Changelog" = "https://github.com/mzaja/betfair-database/blob/main/HISTORY.md"
 
 [project.scripts]
 bfdb = "betfairdatabase.__main__:main"

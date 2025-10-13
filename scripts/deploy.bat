@@ -32,14 +32,14 @@ IF NOT EXIST "dist\betfairdatabase-%RELEASE_VERSION%.tar.gz" (
     EXIT 1
 )
 
-@REM Check that release version is present in changelog
+@REM Check that release version is present in the project config
 FINDSTR /C:"version = \"%RELEASE_VERSION%\"" "pyproject.toml" > NUL
 IF %ERRORLEVEL% NEQ 0 (
     ECHO pyproject.toml does not contain the release version!
     EXIT 1
 )
 
-@REM Check that release version is present in changelog
+@REM Check that release version is present in the changelog
 FINDSTR /C:"%RELEASE_VERSION%" "HISTORY.md" > NUL
 IF %ERRORLEVEL% NEQ 0 (
     ECHO HISTORY.md does not contain the release version!

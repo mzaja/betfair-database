@@ -18,10 +18,10 @@ jobs:
   test:
     runs-on: ${{matrix.os}}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         # If bash is not the default shell, multi-command run steps
@@ -59,7 +59,7 @@ jobs:
         MATRIX_PYTHON_VERSION: ${{ matrix.python-version }}
         MATRIX_OS: ${{matrix.os}}
       run: |
-        if [ "$MATRIX_PYTHON_VERSION" == "3.13" ] && [ "$MATRIX_OS" == "ubuntu-latest" ]; then
+        if [ "$MATRIX_PYTHON_VERSION" == "3.14" ] && [ "$MATRIX_OS" == "ubuntu-latest" ]; then
           coveralls --service=github
         else
           echo "Skipping coveralls coverage upload for this OS & Python combination."

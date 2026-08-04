@@ -1,8 +1,8 @@
 # Requirements for development
 -r requirements.txt
-black
-blacken-docs
+black==26.5.1
+blacken-docs==1.2.0
 coverage
 coveralls
-isort>=5.0
+isort==8.0.1
 pre-commit

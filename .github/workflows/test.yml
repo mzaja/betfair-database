@@ -40,7 +40,7 @@ jobs:
       # However, they pass in an empty virtual environment on my machine,
       # where tzdata is not installed.
       run: |
-        pip install --upgrade pip
+        python -m pip install --upgrade pip
         pip install -r requirements-dev.txt
         if [ "$RUNNER_OS" == "Windows" ]; then
           pip install tzdata

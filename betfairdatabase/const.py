@@ -11,10 +11,11 @@ INDEX_FILENAME = ".betfairdatabaseindex"
 DATA_FILE_SUFFIXES = ("", ".zip", ".gz", ".bz2")
 SQL_TABLE_NAME = "BetfairDatabaseIndex"
 ROWID = "rowid"
+MARKET_ID = "marketId"
 MARKET_DATA_FILE_PATH = "marketDataFilePath"
 MARKET_METADATA_FILE_PATH = "marketMetadataFilePath"
 SQL_TABLE_COLUMNS = (
-    "marketId",
+    MARKET_ID,
     "marketName",
     "marketStartTime",
     "persistenceEnabled",
@@ -55,6 +56,9 @@ SQL_TABLE_COLUMNS = (
     MARKET_METADATA_FILE_PATH,
     MARKET_DATA_FILE_PATH,
 )
+
+# Misc
+BULK_METADATA_FILE_NAME = "metadata.json"
 
 
 # ---------------------------------------------------------------------------

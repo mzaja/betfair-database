@@ -1,5 +1,6 @@
 import contextlib
 import csv
+import json
 import logging
 import os
 import sqlite3
@@ -11,9 +12,11 @@ from typing import Callable, Iterable, Literal, TypeVar
 from tqdm import tqdm
 
 from betfairdatabase.const import (
+    BULK_METADATA_FILE_NAME,
     DATA_FILE_SUFFIXES,
     INDEX_FILENAME,
     MARKET_DATA_FILE_PATH,
+    MARKET_ID,
     MARKET_METADATA_FILE_PATH,
     ROWID,
     SQL_TABLE_COLUMNS,
@@ -150,8 +153,9 @@ class MarketFileProcessor(ProgressBarMixin):
         )
         self.debug_logging_enabled = _is_debug_logging_enabled()
         # Initialise file caches
-        self.metadata_files = {}  # Market catalogues or market definitions
-        self.data_files = {}  # Stream files
+        self.metadata_files: dict[Path, Path] = {}  # Market catalogues/definitions
+        self.data_files: dict[Path, Path] = {}  # Stream files
+        self.bulk_metadata_files: list[Path] = []  # metadata.json files
 
     def index_database(self, connection: sqlite3.Connection) -> int:
         """
@@ -182,17 +186,23 @@ class MarketFileProcessor(ProgressBarMixin):
         Called by the public methods `index_database` and `update_database`.
         """
         action = "importing" if args else "indexing"
+
         # Locate files for processing
         self._locate_data_and_metadata_files(Path(source_dir))
         self.counters.total_markets = len(
             set(self.data_files) | set(self.metadata_files)
         )
-        # Process files without siblings
+
+        # Process metadata.json files
+        importable_markets_1 = self._process_bulk_metadata_files()
+
+        # Process individual market metadata files (catalogues and market definitions)
         self._remove_metadata_files_without_data()
         self._create_missing_metadata_files()
+        importable_markets_2 = self._process_market_metadata_files()
 
-        # Process and import markets
-        importable_markets = self._process_market_metadata_files()
+        # Import markets into the database, optionally moving or copying files if needed
+        importable_markets = importable_markets_1 + importable_markets_2
         self._import_markets_into_database(importable_markets, connection, *args)
         self.counters.log_info(action)
         return self.counters.rows_inserted
@@ -202,21 +212,82 @@ class MarketFileProcessor(ProgressBarMixin):
         Locates market data and metadata files in the source directory,
         linking them using a common dictionary key.
 
-        Sets attributes: self.metadata_files, self.data_files.
+        Sets attributes: `self.metadata_files`, `self.data_files`.
         """
         data_file_suffixes = list(DATA_FILE_SUFFIXES)
         data_file_suffixes.remove("")
-        for p in self._progress_bar(source_dir.rglob("1.*"), "Locating markets"):
+        for file in self._progress_bar(source_dir.rglob("1.*"), "Locating markets"):
             # Metadata files always have a .json extension
-            if p.suffix == ".json":
-                self.metadata_files[p.with_suffix("")] = p
+            if file.suffix == ".json":
+                if file.name == BULK_METADATA_FILE_NAME:
+                    # One could potentially parse the files here already to build the cache
+                    self.bulk_metadata_files.append(file)
+                else:
+                    self.metadata_files[file.with_suffix("")] = file
             # Compressed data files
-            elif p.suffix in data_file_suffixes:
-                self.data_files[p.with_suffix("")] = p
+            elif file.suffix in data_file_suffixes:
+                self.data_files[file.with_suffix("")] = file
             # Uncompressed data files do not have an extension, but
             # the numbers following 1. are treated as one.
-            elif len(p.suffix) > 8:  # Market data files usually have 9 "decimal places"
-                self.data_files[p] = p
+            # They usually have 9 "decimal places"
+            elif len(file.suffix) > 8:
+                self.data_files[file] = file
+
+    def _process_bulk_metadata_files(self) -> list[Market]:
+        """
+        Processes bulk metadata (metadata.json) files. Returns a list of importable
+        market objects with the metadata attached.
+
+        Market data files for which the metadata has already been determined are removed
+        from the cache.
+
+        Because this routine is called before individual metadata files are processed,
+        `<market_id>.json` files are skipped in case of metadata source duplication.
+        """
+        importable_markets = []
+        for metadata_file in self._progress_bar(
+            self.bulk_metadata_files, f"Processing {BULK_METADATA_FILE_NAME} files"
+        ):
+            # Parse contents
+            try:
+                file_entries: list[dict] = json.loads(metadata_file.read_bytes())
+            except JSONDecodeError:
+                # self.counters.corrupt_files += 1  # Would not pass validation
+                logger.error("Error parsing '%s'.", metadata_file)
+                continue
+
+            # Process contents
+            file_cache = {
+                market_id: market_metadata
+                for market_metadata in file_entries
+                if (market_id := market_metadata.get(MARKET_ID)) is not None
+            }
+
+            # Check for invalid entries in the metadata file
+            invalid_entries_count = len(file_entries) - len(file_cache)
+            if invalid_entries_count:
+                logger.warning(
+                    "'%s' contains %d invalid entries without a '%s' field.",
+                    metadata_file,
+                    invalid_entries_count,
+                    MARKET_ID,
+                )
+
+            for market_id, market_metadata in file_cache.items():
+                data_file = self.data_files.pop(metadata_file.parent / market_id, None)
+                if data_file is None:
+                    logger.error(
+                        "'%s' contains an entry for market ID '%s', "
+                        "but a matching market data file cannot be found in the directory.",
+                        metadata_file,
+                        market_id,
+                    )
+                market = Market(metadata_file, data_file)
+                market.attach_metadata(market_metadata)
+                self.racing_data_processor.add(market)
+                importable_markets.append(market)
+
+        return importable_markets
 
     def _remove_metadata_files_without_data(self) -> None:
         """Removes metadata files without a corresponding data file from the cache."""
@@ -237,7 +308,9 @@ class MarketFileProcessor(ProgressBarMixin):
     def _create_missing_metadata_files(self) -> None:
         """Creates missing metadata files for data files missing them."""
         data_files_without_metadata = {
-            k: p for k, p in self.data_files.items() if k not in self.metadata_files
+            stem_path: full_path
+            for stem_path, full_path in self.data_files.items()
+            if stem_path not in self.metadata_files
         }
         for key, data_file in self._progress_bar(
             data_files_without_metadata.items(), "Creating metadata files"
@@ -266,7 +339,8 @@ class MarketFileProcessor(ProgressBarMixin):
         """
         importable_markets = []
         markets_gen = (
-            Market(v, self.data_files[k]) for k, v in self.metadata_files.items()
+            Market(full_path, self.data_files[stem_path])
+            for stem_path, full_path in self.metadata_files.items()
         )
         for market in self._progress_bar(
             markets_gen, "Processing markets", total=len(self.metadata_files)
@@ -334,8 +408,7 @@ class MarketFileProcessor(ProgressBarMixin):
 
             # This section is always executed, for both updating and indexing
             sql_data_map = market.create_sql_mapping(
-                # Rejects non-racing markets
-                self.racing_data_processor.get(market)
+                self.racing_data_processor.get(market)  # Rejects non-racing market
             )
             connection.execute(
                 f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",

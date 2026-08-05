@@ -6,7 +6,7 @@ from os import SEEK_SET
 from pathlib import Path
 from zipfile import ZipFile
 
-from betfairdatabase.const import ENCODING_UTF_8
+from betfairdatabase.const import ENCODING_UTF_8, MARKET_ID
 from betfairdatabase.exceptions import MarketDefinitionMissingError
 from betfairdatabase.utils import read_last_line_in_a_file
 
@@ -83,7 +83,7 @@ class MarketDefinitionProcessor:
         # Parse data, inject market ID and return the correct dict sub-class
         market_change_message = json.loads(line)["mc"][0]
         market_definition = market_change_message[MARKET_DEFINITION]
-        market_definition["marketId"] = market_change_message["id"]  # Inject market ID
+        market_definition[MARKET_ID] = market_change_message["id"]  # Inject market ID
         return market_definition
 
     def create_market_definition_file(

@@ -6,7 +6,7 @@ import sqlite3
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Callable, Iterable, Literal
+from typing import Callable, Iterable, Literal, TypeVar
 
 from tqdm import tqdm
 
@@ -101,6 +101,8 @@ class Counters:
 class ProgressBarMixin:
     """Progress bar mixin class."""
 
+    T = TypeVar("T")
+
     def __init__(self, progress_bar_enabled: bool):
         self.progress_bar_enabled = progress_bar_enabled
 
@@ -108,11 +110,11 @@ class ProgressBarMixin:
     # of the public API. It is only used internally by the class.
     def _progress_bar(
         self,
-        iterable: Iterable,
+        iterable: Iterable[T],
         name: str,
         unit: str = "markets",
         total: int | None = None,
-    ) -> Iterable:
+    ) -> Iterable[T]:
         """Applies the progress bar to the iterable."""
         if not self.progress_bar_enabled:
             return iterable

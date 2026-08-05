@@ -158,20 +158,7 @@ class MarketFileProcessor(ProgressBarMixin):
         Indexes the database by processing market data and metadata files.
         Returns the number of indexed markets.
         """
-        # Locate files for processing
-        self._locate_data_and_metadata_files(self.database_dir)
-        self.counters.total_markets = len(
-            set(self.data_files) | set(self.metadata_files)
-        )
-        # Process files without siblings
-        self._remove_metadata_files_without_data()
-        self._create_missing_metadata_files()
-
-        # Process and import markets
-        importable_markets = self._process_market_metadata_files()
-        self._import_markets_into_database(importable_markets, connection)
-        self.counters.log_info("indexing")
-        return self.counters.rows_inserted
+        return self._main(self.database_dir, connection)
 
     def update_database(
         self,
@@ -185,6 +172,16 @@ class MarketFileProcessor(ProgressBarMixin):
         Inserts the market data and metadata files from source_dir into the existing database.
         Returns the number of inserted markets.
         """
+        return self._main(
+            Path(source_dir), connection, copy, import_pattern, on_duplicates
+        )
+
+    def _main(self, source_dir: Path, connection: sqlite3.Connection, *args) -> int:
+        """
+        Main routine of this class.
+        Called by the public methods `index_database` and `update_database`.
+        """
+        action = "importing" if args else "indexing"
         # Locate files for processing
         self._locate_data_and_metadata_files(Path(source_dir))
         self.counters.total_markets = len(
@@ -196,10 +193,8 @@ class MarketFileProcessor(ProgressBarMixin):
 
         # Process and import markets
         importable_markets = self._process_market_metadata_files()
-        self._import_markets_into_database(
-            importable_markets, connection, copy, import_pattern, on_duplicates
-        )
-        self.counters.log_info("importing")
+        self._import_markets_into_database(importable_markets, connection, *args)
+        self.counters.log_info(action)
         return self.counters.rows_inserted
 
     def _locate_data_and_metadata_files(self, source_dir: Path | None) -> None:

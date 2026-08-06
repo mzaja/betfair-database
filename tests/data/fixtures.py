@@ -3,7 +3,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-TEST_DATA_DIR = Path(__file__).parent
+DATASETS_ROOT_DIR = Path(__file__).parent / "datasets"
 
 
 @dataclass(kw_only=True)
@@ -22,11 +22,11 @@ class Datasets:
         """Returns a list of paths to the selected datasets."""
         paths = []
         if self.compressed:
-            paths.append("datasets/zip-lzma")
+            paths.append("zip-lzma")
         if self.uncompressed:
-            paths.append("datasets/uncompressed")
+            paths.append("uncompressed")
         if self.official:
-            paths.append("datasets/official")
+            paths.append("official")
         if self.corrupt:
             paths.append("corrupt")
         if self.missing_data:
@@ -36,7 +36,7 @@ class Datasets:
         if self.duplicates:
             paths.append("duplicates")
         if absolute:
-            return [TEST_DATA_DIR / p for p in paths]
+            return [DATASETS_ROOT_DIR / p for p in paths]
         return [Path(p) for p in paths]
 
     def copy_files(self, dest_dir: Path | str, flatten: bool = False) -> None:
@@ -44,7 +44,7 @@ class Datasets:
         dest_dir = Path(dest_dir).resolve()  # Resolve needed for tempdirs
         for dataset in self.get_paths(absolute=False):
             dest = dest_dir / ("" if flatten else dataset)
-            shutil.copytree(TEST_DATA_DIR / dataset, dest, dirs_exist_ok=True)
+            shutil.copytree(DATASETS_ROOT_DIR / dataset, dest, dirs_exist_ok=True)
 
 
 class TestFixture:

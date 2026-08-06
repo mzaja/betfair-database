@@ -1,6 +1,4 @@
 import csv
-import shutil
-import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
@@ -479,9 +477,8 @@ class TestIntegrationPart2(TestIntegrationBase):
         # 1.216395251.json: marketTime changed to "2023-07-28T02:35:00.000Z".
         # 1.216418252.json: totalMatched changed to 134763.88 (irrelevant change)
         # The rest: Content identical to originals.
-        dest_dir = self.test_data_dir / "duplicates"
-        shutil.copytree("./tests/data/duplicates", dest_dir, dirs_exist_ok=True)
-        return dest_dir
+        Datasets(duplicates=True).copy_files(self.test_data_dir)
+        return self.test_data_dir / "duplicates"
 
     def base_test_move_insert(self, copy: bool, leftover_files: list[list[str]]):
         """Base test for testing copy/move style insert method."""

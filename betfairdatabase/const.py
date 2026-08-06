@@ -58,7 +58,7 @@ SQL_TABLE_COLUMNS = (
 )
 
 # Misc
-BULK_METADATA_FILE_NAME = "metadata.json"
+METADATA_FILE_NAME = "metadata.json"
 
 
 # ---------------------------------------------------------------------------

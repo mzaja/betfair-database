@@ -12,12 +12,12 @@ from typing import Callable, Iterable, Literal, TypeVar
 from tqdm import tqdm
 
 from betfairdatabase.const import (
-    BULK_METADATA_FILE_NAME,
     DATA_FILE_SUFFIXES,
     INDEX_FILENAME,
     MARKET_DATA_FILE_PATH,
     MARKET_ID,
     MARKET_METADATA_FILE_PATH,
+    METADATA_FILE_NAME,
     ROWID,
     SQL_TABLE_COLUMNS,
     SQL_TABLE_NAME,
@@ -219,11 +219,7 @@ class MarketFileProcessor(ProgressBarMixin):
         for file in self._progress_bar(source_dir.rglob("1.*"), "Locating markets"):
             # Metadata files always have a .json extension
             if file.suffix == ".json":
-                if file.name == BULK_METADATA_FILE_NAME:
-                    # One could potentially parse the files here already to build the cache
-                    self.bulk_metadata_files.append(file)
-                else:
-                    self.metadata_files[file.with_suffix("")] = file
+                self.metadata_files[file.with_suffix("")] = file
             # Compressed data files
             elif file.suffix in data_file_suffixes:
                 self.data_files[file.with_suffix("")] = file
@@ -232,6 +228,7 @@ class MarketFileProcessor(ProgressBarMixin):
             # They usually have 9 "decimal places"
             elif len(file.suffix) > 8:
                 self.data_files[file] = file
+        self.bulk_metadata_files = list(source_dir.rglob(METADATA_FILE_NAME))
 
     def _process_bulk_metadata_files(self) -> list[Market]:
         """
@@ -246,7 +243,7 @@ class MarketFileProcessor(ProgressBarMixin):
         """
         importable_markets = []
         for metadata_file in self._progress_bar(
-            self.bulk_metadata_files, f"Processing {BULK_METADATA_FILE_NAME} files"
+            self.bulk_metadata_files, f"Processing {METADATA_FILE_NAME} files"
         ):
             # Parse contents
             try:
@@ -256,21 +253,29 @@ class MarketFileProcessor(ProgressBarMixin):
                 logger.error("Error parsing '%s'.", metadata_file)
                 continue
 
+            if not isinstance(file_entries, list):
+                logger.error(
+                    "'%s' should be a list of dicts, not a %s.",
+                    metadata_file,
+                    file_entries.__class__.__name__,
+                )
+                continue
+
             # Process contents
-            file_cache = {
-                market_id: market_metadata
-                for market_metadata in file_entries
-                if (market_id := market_metadata.get(MARKET_ID)) is not None
-            }
+            file_cache: dict[str, dict] = {}
+            for market_metadata in file_entries:
+                try:
+                    file_cache[market_metadata[MARKET_ID]] = market_metadata
+                except (KeyError, TypeError):
+                    pass  # A warning is logged below
 
             # Check for invalid entries in the metadata file
             invalid_entries_count = len(file_entries) - len(file_cache)
             if invalid_entries_count:
-                logger.warning(
-                    "'%s' contains %d invalid entries without a '%s' field.",
+                logger.error(
+                    "'%s' contains %d invalid entries",
                     metadata_file,
                     invalid_entries_count,
-                    MARKET_ID,
                 )
 
             for market_id, market_metadata in file_cache.items():
@@ -282,6 +287,7 @@ class MarketFileProcessor(ProgressBarMixin):
                         metadata_file,
                         market_id,
                     )
+                    continue
                 market = Market(metadata_file, data_file)
                 market.attach_metadata(market_metadata)
                 self.racing_data_processor.add(market)

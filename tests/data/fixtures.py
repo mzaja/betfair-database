@@ -60,12 +60,13 @@ class TestFixture:
 
     def __init__(
         self,
-        datasets: Datasets,
+        datasets: Datasets | None = None,
         flatten: bool = False,
     ):
         self._tempdir = tempfile.TemporaryDirectory()
         self.path = Path(self._tempdir.name).resolve()
-        datasets.copy_files(self.path, flatten=flatten)
+        if datasets:
+            datasets.copy_files(self.path, flatten=flatten)
 
     def close(self) -> None:
         if self._tempdir is not None:

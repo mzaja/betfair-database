@@ -41,7 +41,7 @@ class Datasets:
 
     def copy_files(self, dest_dir: Path | str, flatten: bool = False) -> None:
         """Copies the selected datasets to the specified directory."""
-        dest_dir = Path(dest_dir)
+        dest_dir = Path(dest_dir).resolve()  # Resolve needed for tempdirs
         for dataset in self.get_paths(absolute=False):
             dest = dest_dir / ("" if flatten else dataset)
             shutil.copytree(TEST_DATA_DIR / dataset, dest, dirs_exist_ok=True)
@@ -61,20 +61,8 @@ class TestFixture:
         flatten: bool = False,
     ):
         self._tempdir = tempfile.TemporaryDirectory()
-        self.path = self.create_test_dataset(self._tempdir.name, datasets, flatten)
-
-    @staticmethod
-    def create_test_dataset(
-        target_dir: Path | str,
-        datasets: Datasets,
-        flatten: bool = False,
-    ) -> Path:
-        """
-        Cretes a test dataset by copying selected datasets into the target directory.
-        """
-        target_dir = Path(target_dir).resolve()  # Resolve needed for tempdirs
-        datasets.copy_files(target_dir, flatten=flatten)
-        return target_dir
+        self.path = Path(self._tempdir.name).resolve()
+        datasets.copy_files(self.path, flatten=flatten)
 
     def close(self) -> None:
         if self._tempdir is not None:

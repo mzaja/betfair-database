@@ -170,9 +170,7 @@ class TestBetfairDatabase(unittest.TestCase):
 
             with self.assertLogs(level=logging.DEBUG) as logs:
                 # Import additional markets while skipping duplicates
-                TestFixture.create_test_dataset(
-                    db_dir, Datasets(duplicates=True), flatten=False
-                )
+                Datasets(duplicates=True).copy_files(db_dir, flatten=False)
                 duplicates_dir = db_dir / "duplicates"
                 database.insert(
                     duplicates_dir,

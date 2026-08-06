@@ -17,6 +17,7 @@ class Datasets:
     missing_data: bool = False
     missing_metadata: bool = False
     duplicates: bool = False
+    bulk_metadata: bool = False
 
     def get_paths(self, absolute: bool = True) -> list[Path]:
         """Returns a list of paths to the selected datasets."""
@@ -35,6 +36,8 @@ class Datasets:
             paths.append("missing_metadata")
         if self.duplicates:
             paths.append("duplicates")
+        if self.bulk_metadata:
+            paths.append("bulk_metadata")
         if absolute:
             return [DATASETS_ROOT_DIR / p for p in paths]
         return [Path(p) for p in paths]

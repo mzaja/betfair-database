@@ -1,6 +1,5 @@
 import logging
 import shutil
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -9,6 +8,7 @@ from betfairdatabase import BetfairDatabase
 from betfairdatabase.const import DuplicatePolicy
 from betfairdatabase.database import Counters, logger
 from betfairdatabase.imports import ImportPatterns
+from tests.data import Datasets, TestFixture
 
 
 class TestBetfairDatabase(unittest.TestCase):
@@ -16,8 +16,6 @@ class TestBetfairDatabase(unittest.TestCase):
     Additional tests for BetfairDatabase class and its helper classes which
     are not covered by integration tests.
     """
-
-    TEST_DATA_DIR = Path("./tests/data")
 
     def setUp(self):
         global logger
@@ -29,38 +27,6 @@ class TestBetfairDatabase(unittest.TestCase):
         logger.setLevel(self._original_logger_level)
         logger.disabled = self._original_logger_disabled
 
-    @classmethod
-    def create_test_dataset(
-        cls,
-        temp_dir_path: Path | str,
-        flatten: bool = False,
-        *,  # Improve readability
-        compressed: bool = False,
-        uncompressed: bool = False,
-        corrupt: bool = False,
-        missing_data: bool = False,
-        missing_metadata: bool = False,
-        duplicates: bool = False,
-    ) -> tempfile.TemporaryDirectory:
-        """Cretes a test dataset by copying source data into the temporary directory."""
-        temp_dir_path = Path(temp_dir_path).resolve()
-        datasets = []
-        if compressed:
-            datasets.append("datasets/zip-lzma")
-        if uncompressed:
-            datasets.append("datasets/uncompressed")
-        if corrupt:
-            datasets.append("corrupt")
-        if missing_data:
-            datasets.append("missing_data")
-        if missing_metadata:
-            datasets.append("missing_metadata")
-        if duplicates:
-            datasets.append("duplicates")
-        for dataset in datasets:
-            dest = temp_dir_path / ("" if flatten else dataset)
-            shutil.copytree(cls.TEST_DATA_DIR / dataset, dest, dirs_exist_ok=True)
-
     def test_corrupt_metadata_and_missing_data_files(self):
         """
         Corrupt market catalogues and missing market data files do not break indexing.
@@ -70,11 +36,10 @@ class TestBetfairDatabase(unittest.TestCase):
         corrupt_market_id = "1.221089567"
         missing_data_file_market_id = "1.199967351"  # In uncompressed dataset
         with (
-            tempfile.TemporaryDirectory() as tmpdir,
+            TestFixture(datasets=Datasets(corrupt=True, uncompressed=True)) as db_dir,
             self.assertLogs(level=logging.INFO) as logs,
         ):
-            self.create_test_dataset(tmpdir, corrupt=True, uncompressed=True)
-            database = BetfairDatabase(tmpdir)
+            database = BetfairDatabase(db_dir)
             database.index()
 
             # Check what was imported and what wasn't
@@ -124,15 +89,16 @@ class TestBetfairDatabase(unittest.TestCase):
         logger.setLevel(level=logging.DEBUG)
         IMPORTABLE_MARKETS_COUNT = 4
         with (
-            tempfile.TemporaryDirectory() as tmpdir,
+            TestFixture(
+                datasets=Datasets(missing_metadata=True), flatten=True
+            ) as db_dir,
             self.assertLogs(level=logging.INFO) as logs,
         ):
-            self.create_test_dataset(tmpdir, missing_metadata=True, flatten=True)
-            database = BetfairDatabase(tmpdir)
+            database = BetfairDatabase(db_dir)
             database.index()
 
             # Check that the expected number of metadata files has been created and imported
-            metadata_files = list(Path(tmpdir).glob("1.*.json"))
+            metadata_files = list(db_dir.glob("1.*.json"))
             self.assertEqual(len(metadata_files), IMPORTABLE_MARKETS_COUNT)
             markets = database.select()
             self.assertEqual(len(markets), IMPORTABLE_MARKETS_COUNT)
@@ -164,11 +130,10 @@ class TestBetfairDatabase(unittest.TestCase):
         """
         DUPLICATE_FILES = ("1.201590187.zip", "1.216395251", "1.216418252")
         logger.setLevel(level=logging.DEBUG)
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with TestFixture(Datasets(compressed=True), flatten=True) as db_dir:
             with self.assertLogs(level=logging.DEBUG) as logs:
                 # Indexing the database for the first time
-                self.create_test_dataset(tmpdir, flatten=True, compressed=True)
-                database = BetfairDatabase(tmpdir)
+                database = BetfairDatabase(db_dir)
                 database.index()
 
                 debug_messages = sorted(
@@ -205,8 +170,10 @@ class TestBetfairDatabase(unittest.TestCase):
 
             with self.assertLogs(level=logging.DEBUG) as logs:
                 # Import additional markets while skipping duplicates
-                self.create_test_dataset(tmpdir, flatten=False, duplicates=True)
-                duplicates_dir = Path(tmpdir).resolve() / "duplicates"
+                TestFixture.create_test_dataset(
+                    db_dir, Datasets(duplicates=True), flatten=False
+                )
+                duplicates_dir = db_dir / "duplicates"
                 database.insert(
                     duplicates_dir,
                     copy=True,
@@ -311,17 +278,16 @@ class TestBetfairDatabase(unittest.TestCase):
     @mock.patch("betfairdatabase.database.tqdm")
     def test_progress_bar(self, mock_tqdm: mock.MagicMock):
         """Tests that enabling or disabling the progress bar works."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            self.create_test_dataset(tmpdir, flatten=True, compressed=True)
+        with TestFixture(Datasets(compressed=True), flatten=True) as db_dir:
             # tqdm must return the original iterable
             mock_tqdm.side_effect = lambda iterable, *a, **k: iterable
             for progress_bar_enabled in [True, False]:
-                database = BetfairDatabase(tmpdir, progress_bar_enabled)
+                database = BetfairDatabase(db_dir, progress_bar_enabled)
                 for method_name, args in [
                     ("index", [True]),  # force
-                    ("export", [tmpdir]),  # dest
+                    ("export", [db_dir]),  # dest
                     ("clean", []),
-                    ("insert", [tmpdir, True]),  # src, copy
+                    ("insert", [db_dir, True]),  # src, copy
                 ]:
                     with self.subTest(
                         method=method_name, progress_bar=progress_bar_enabled

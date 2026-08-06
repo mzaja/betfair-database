@@ -16,6 +16,7 @@ from betfairdatabase.exceptions import (
     IndexExistsError,
     IndexMissingError,
 )
+from tests.data import Datasets, TestFixture
 
 
 class TestIntegrationBase(unittest.TestCase):
@@ -33,8 +34,10 @@ class TestIntegrationBase(unittest.TestCase):
         2. Copies test data to it.
         3. Lists the copied files into categories.
         """
-        cls.test_data_dir = Path(tempfile.mkdtemp()).resolve()
-        shutil.copytree(cls.TEST_DATA_DIR_SRC, cls.test_data_dir, dirs_exist_ok=True)
+        cls.test_fixture = TestFixture(
+            Datasets(compressed=True, uncompressed=True, official=True)
+        )
+        cls.test_data_dir = cls.test_fixture.path
         cls.all_source_files = {p.resolve() for p in cls.test_data_dir.rglob("1.*")}
         cls.metadata_source_files = {
             p for p in cls.all_source_files if p.suffix == ".json"
@@ -44,15 +47,7 @@ class TestIntegrationBase(unittest.TestCase):
     @classmethod
     def teardown_test_fixtures(cls):
         """Removes the temporary directory containing test data."""
-        shutil.rmtree(cls.test_data_dir)
-
-    @classmethod
-    def setUpClass(cls):
-        cls.setup_test_fixtures()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.teardown_test_fixtures()
+        cls.test_fixture.close()
 
     def setUp(self):
         """Erases all database indexes between test cases."""
@@ -75,6 +70,14 @@ class TestIntegrationPart1(TestIntegrationBase):
 
     The tests in this class require copying the test data only once.
     """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.setup_test_fixtures()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.teardown_test_fixtures()
 
     def test_database_directory_does_not_exist(self):
         """Database directory does not exist."""

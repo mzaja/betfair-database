@@ -216,19 +216,26 @@ class MarketFileProcessor(ProgressBarMixin):
         """
         data_file_suffixes = list(DATA_FILE_SUFFIXES)
         data_file_suffixes.remove("")
-        for file in self._progress_bar(source_dir.rglob("1.*"), "Locating markets"):
-            # Metadata files always have a .json extension
-            if file.suffix == ".json":
-                self.metadata_files[file.with_suffix("")] = file
-            # Compressed data files
-            elif file.suffix in data_file_suffixes:
-                self.data_files[file.with_suffix("")] = file
-            # Uncompressed data files do not have an extension, but
-            # the numbers following 1. are treated as one.
-            # They usually have 9 "decimal places"
-            elif len(file.suffix) > 8:
-                self.data_files[file] = file
-        self.bulk_metadata_files = list(source_dir.rglob(METADATA_FILE_NAME))
+        # pathlib.Path.rglob does not support brace expansion to look for multiple
+        # patterns at one. Therefore, all files need to be located and filtered
+        # manually to avoid traversing the whole directory tree more than once.
+        for file in self._progress_bar(source_dir.rglob("*"), "Locating markets"):
+            file_name = file.name
+            if file_name.startswith("1."):
+                file_suffix = file.suffix
+                # Metadata files always have a .json extension
+                if file_suffix == ".json":
+                    self.metadata_files[file.with_suffix("")] = file
+                # Compressed data files
+                elif file_suffix in data_file_suffixes:
+                    self.data_files[file.with_suffix("")] = file
+                # Uncompressed data files do not have an extension, but
+                # the numbers following 1. are treated as one.
+                # They usually have 9 "decimal places"
+                elif len(file_suffix) > 8:
+                    self.data_files[file] = file
+            elif file_name == METADATA_FILE_NAME:
+                self.bulk_metadata_files.append(file)
 
     def _process_bulk_metadata_files(self) -> list[Market]:
         """

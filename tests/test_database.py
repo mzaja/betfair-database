@@ -5,8 +5,9 @@ from unittest import mock
 
 from betfairdatabase import BetfairDatabase
 from betfairdatabase.const import MARKET_ID, METADATA_FILE_NAME, DuplicatePolicy
-from betfairdatabase.database import Counters, logger
+from betfairdatabase.database import logger
 from betfairdatabase.imports import ImportPatterns
+from betfairdatabase.processor import Counters
 from tests.data import Datasets, TestFixture
 
 
@@ -276,7 +277,7 @@ class TestBetfairDatabase(TestLoggingBase):
                 database.index(force=True)
                 self.assertIn("Overwriting an existing index", logs.records[0].message)
 
-    @mock.patch("betfairdatabase.database.tqdm")
+    @mock.patch("betfairdatabase.utils.tqdm")
     def test_progress_bar(self, mock_tqdm: mock.MagicMock):
         """Tests that enabling or disabling the progress bar works."""
         with TestFixture(Datasets(compressed=True), flatten=True) as db_dir:

@@ -1,7 +1,11 @@
 import datetime as dt
+import logging
 from io import BufferedReader
-from os import SEEK_CUR, SEEK_END, SEEK_SET
+from os import SEEK_CUR, SEEK_END
+from typing import Iterable, TypeVar
 from zoneinfo import ZoneInfo
+
+from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
 # CONSTANTS
@@ -65,3 +69,42 @@ def read_last_line_in_a_file(file_reader: BufferedReader) -> bytes:
                 return buffer
         # Roll back the head to undo the last read
         file_reader.seek(-read_step, SEEK_CUR)
+
+
+def is_debug_logging_enabled(logger: logging.Logger) -> bool:
+    """
+    Returns True if debug logging is enabled, else False.
+
+    Performance-wise, it is over 10x more efficient to check this once and
+    skip logging in-code than letting the logger check on every single call.
+    """
+    return (not logger.disabled) and (logger.getEffectiveLevel() <= logging.DEBUG)
+
+
+# ---------------------------------------------------------------------------
+# CLASSES
+# ---------------------------------------------------------------------------
+class ProgressBarMixin:
+    """Progress bar mixin class."""
+
+    T = TypeVar("T")
+
+    def __init__(self, progress_bar_enabled: bool):
+        self.progress_bar_enabled = progress_bar_enabled
+
+    # This is a private method because it is not supposed to be a part
+    # of the public API. It is only used internally by the class.
+    def _progress_bar(
+        self,
+        iterable: Iterable[T],
+        name: str,
+        unit: str = "markets",
+        total: int | None = None,
+    ) -> Iterable[T]:
+        """Applies the progress bar to the iterable."""
+        if not self.progress_bar_enabled:
+            return iterable
+        else:
+            if not unit.startswith(" "):
+                unit = " " + unit
+            return tqdm(iterable, desc=name, unit=unit, total=total)

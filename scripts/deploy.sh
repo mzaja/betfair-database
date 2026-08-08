@@ -13,13 +13,26 @@
 # Runs checks and distributes the Python package if successful
 # Commits, tags, and pushes the release to remote
 # ============================================================
-RELEASE_VERSION=1.3.1  # Set the release version here
+RELEASE_VERSION=$1  # Set the release version here
+
+if [ -z "$RELEASE_VERSION" ]; then
+    echo "Release version must be provided as the first argument"; exit 1
+fi
 
 pushd "$(dirname "$0")/.." > /dev/null
 
 # Ensure on the main branch
 if [ "$(git branch --show-current)" != "main" ]; then
     echo "Not on the main branch"; exit 1
+fi
+
+# Check that there are no upstream changes on this branch
+git fetch
+if [ $? -ne 0 ]; then
+    echo "Failed to fetch upstream changes"; exit 1
+fi
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse @{u})" ]; then
+    echo "The local branch is not in sync with the upstream branch"; exit 1
 fi
 
 # Check that the distribution has been built already

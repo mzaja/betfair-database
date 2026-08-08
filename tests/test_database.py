@@ -347,31 +347,44 @@ class TestBulkMetadataFile(TestLoggingBase):
     Holds tests for metadata.json files.
     """
 
+    def setUp(self):
+        super().setUp()
+        self.text_fixture = TestFixture(Datasets(bulk_metadata=True))
+        self.db_dir = self.text_fixture.path
+        self.dataset_dir = self.db_dir / "bulk_metadata"
+        self.metadata_file = self.dataset_dir / METADATA_FILE_NAME
+
+    def tearDown(self):
+        super().tearDown()
+        self.text_fixture.close()
+
+    def count_market_files(self) -> int:
+        """
+        Returns the number of market data and metadata files (starting with `1.`)
+        in the text fixture directory.
+        """
+        return len(list(self.db_dir.rglob("1.*")))
+
     def test_parsing_and_indexing(self):
         """Tests database indexing with a metadata.json file present in the database."""
-        with TestFixture(Datasets(bulk_metadata=True)) as db_dir:
-            market_files_before = len(list(db_dir.rglob("1.*")))
-            database = BetfairDatabase(db_dir)
-            database.index()
-            market_files_after = len(list(db_dir.rglob("1.*")))
-            # Verify that the database did not create metadata files
-            self.assertEqual(market_files_after, market_files_before)
-            data = database.select()
-            self.assertEqual(len(data), 4)
-            self.assertEqual(
-                {x[MARKET_ID] for x in data},
-                {"1.197931750", "1.197931751", "1.201590187", "1.214870442"},
-            )
+        market_files_before = self.count_market_files()
+        database = BetfairDatabase(self.db_dir)
+        database.index()
+        market_files_after = self.count_market_files()
+        # Verify that the database did not create metadata files
+        self.assertEqual(market_files_after, market_files_before)
+        data = database.select()
+        self.assertEqual(len(data), 4)
+        self.assertEqual(
+            {x[MARKET_ID] for x in data},
+            {"1.197931750", "1.197931751", "1.201590187", "1.214870442"},
+        )
 
     def test_file_decode_error(self):
         """Tests handling errors in parsing metadata.json files."""
-        with (
-            TestFixture(Datasets(bulk_metadata=True)) as db_dir,
-            self.assertLogs(level=logging.ERROR) as logs,
-        ):
-            metadata_file = next(db_dir.rglob(METADATA_FILE_NAME))
-            metadata_file.write_bytes(metadata_file.read_bytes()[:-5])
-            database = BetfairDatabase(db_dir)
+        with (self.assertLogs(level=logging.ERROR) as logs,):
+            self.metadata_file.write_bytes(self.metadata_file.read_bytes()[:-5])
+            database = BetfairDatabase(self.db_dir)
             database.index()
             # Verify metadata was imported from market definitions (fallback)
             self.assertEqual(len(database.select()), 4)
@@ -388,13 +401,10 @@ class TestBulkMetadataFile(TestLoggingBase):
         Tests that an error message is logged when metadata.json file contains
         an entry for a nonexistent market data file.
         """
-        with (
-            TestFixture(Datasets(bulk_metadata=True)) as db_dir,
-            self.assertLogs(level=logging.ERROR) as logs,
-        ):
-            data_file = next(db_dir.rglob("1.*.zip"))
+        with (self.assertLogs(level=logging.ERROR) as logs,):
+            data_file = self.dataset_dir / "1.197931750.zip"
             data_file.unlink()
-            database = BetfairDatabase(db_dir)
+            database = BetfairDatabase(self.db_dir)
             database.index()
             self.assertEqual(len(database.select()), 3)
 
@@ -407,21 +417,17 @@ class TestBulkMetadataFile(TestLoggingBase):
 
     def test_file_contains_invalid_entries(self):
         """Invalid entries in metadata.json's list are skipped, and the rest are processed."""
-        with (
-            TestFixture(Datasets(bulk_metadata=True)) as db_dir,
-            self.assertLogs(level=logging.ERROR) as logs,
-        ):
+        with (self.assertLogs(level=logging.ERROR) as logs,):
             # Inject invalid entries into metadata file
-            metadata_file = next(db_dir.rglob(METADATA_FILE_NAME))
-            contents: list = json.loads(metadata_file.read_bytes())
+            contents: list = json.loads(self.metadata_file.read_bytes())
             contents.insert(2, [{"what_am_I_doing": "in_a_metadata.json file?"}])
             contents.insert(1, {"some_chicken": "some_neck"})
             contents.insert(0, {})
-            metadata_file.write_text(json.dumps(contents))
+            self.metadata_file.write_text(json.dumps(contents))
 
-            market_files_before = len(list(db_dir.rglob("1.*")))
-            BetfairDatabase(db_dir).index()
-            market_files_after = len(list(db_dir.rglob("1.*")))
+            market_files_before = self.count_market_files()
+            BetfairDatabase(self.db_dir).index()
+            market_files_after = self.count_market_files()
             # Verify metadata.json was used, not market definitions
             self.assertEqual(market_files_after, market_files_before)
 
@@ -434,13 +440,9 @@ class TestBulkMetadataFile(TestLoggingBase):
 
     def test_file_in_not_a_list(self):
         """A warning is logged if metadata.json is not a list of dicts."""
-        with (
-            TestFixture(Datasets(bulk_metadata=True)) as db_dir,
-            self.assertLogs(level=logging.ERROR) as logs,
-        ):
-            metadata_file = next(db_dir.rglob(METADATA_FILE_NAME))
-            metadata_file.write_text(json.dumps({"I_should": "be_a_list"}))
-            database = BetfairDatabase(db_dir)
+        with (self.assertLogs(level=logging.ERROR) as logs,):
+            self.metadata_file.write_text(json.dumps({"I_should": "be_a_list"}))
+            database = BetfairDatabase(self.db_dir)
             database.index()
             self.assertEqual(len(database.select()), 4)
 

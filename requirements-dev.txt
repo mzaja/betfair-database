@@ -2,6 +2,7 @@
 -r requirements.txt
 black==26.5.1
 blacken-docs==1.2.0
+build
 coverage
 coveralls
 isort==8.0.1

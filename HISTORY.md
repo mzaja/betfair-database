@@ -7,6 +7,7 @@
 ## 1.4.0 (2026-08-08)
 ### Improvements
 - Market metadata for a whole directory can be parsed from a single `metadata.json` file.
+- Added Python 3.14 support.
 
 ## 1.3.1 (2025-03-16)
 ### Bug fixes

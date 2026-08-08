@@ -1,5 +1,9 @@
 # Release History
 
+## 1.4.0 (2026-08-08)
+### Improvements
+- Market metadata for a whole directory can be parsed from a single `metadata.json` file.
+
 ## 1.3.1 (2025-03-16)
 ### Bug fixes
 - Field `marketTime` is aliased to `marketStartTime` in processed market definitions, rather than renamed.

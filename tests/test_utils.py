@@ -124,9 +124,9 @@ class TestUtils(unittest.TestCase):
             t_readlines = perf_counter_ns() - t_start
             self.assertEqual(line, b"Z" * char_repeats + b"\n")  # Test correctness
 
-            for t_conventional in [t_iterate, t_readlines]:
-                # The method should be at least twice as fast as conventional ones
-                self.assertLess(2 * t_jump_to_back, t_conventional)
+            improvement_factor = 2
+            self.assertLess(improvement_factor * t_jump_to_back, t_iterate)
+            self.assertLess(improvement_factor * t_jump_to_back, t_readlines)
 
     def test_read_last_line_in_a_file_line_exceeds_read_step(self):
         """

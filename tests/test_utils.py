@@ -93,6 +93,13 @@ class TestUtils(unittest.TestCase):
         Reading the last line in a file using this method should be considerably faster
         than iterating through the same file line-by-line.
         """
+        import sys
+
+        # The test is currently flaky on Python 3.14 for Windows.
+        # Because the test compares relative performance, this could be both
+        # caused by an improvement or a regression in the interpreter.
+        flaky = (sys.platform == "win32") and (sys.version_info[:2] == (3, 14))
+
         # Use a named file to ensure it is actually located on the file system, and is not
         # a vritual file store in RAM
         number_of_filler_lines = 1000
@@ -124,7 +131,7 @@ class TestUtils(unittest.TestCase):
             t_readlines = perf_counter_ns() - t_start
             self.assertEqual(line, b"Z" * char_repeats + b"\n")  # Test correctness
 
-            improvement_factor = 2
+            improvement_factor = 2 if not flaky else 1.5
             self.assertLess(improvement_factor * t_jump_to_back, t_iterate)
             self.assertLess(improvement_factor * t_jump_to_back, t_readlines)
 

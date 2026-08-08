@@ -117,6 +117,7 @@ firefox https://github.com/mzaja/betfair-database/releases/new
 read -p "Upload package to PyPI? (y/n)" choice
 if [ "$choice" = "y" ]; then
     python -m twine upload dist/*
+    firefox https://pypi.org/project/betfairdatabase/$RELEASE_VERSION/
 fi
 
 popd > /dev/null

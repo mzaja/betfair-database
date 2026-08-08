@@ -59,7 +59,7 @@ fi
 
 set -e
 # Stage and commit files, add tags and push
-git add pyproject.toml HISTORY.md scripts/deploy.sh
+git add pyproject.toml HISTORY.md
 git commit -m "Prepare release $RELEASE_VERSION"
 git tag "v$RELEASE_VERSION"
 git push

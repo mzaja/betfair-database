@@ -38,7 +38,7 @@ for market in dataset:
 
 Both the self-recorded and official Betfair data files are supported. The historical data can be grouped and divided into any subfolder hierarchy, but it must follow this convention:
 
-1. Market metadata (market catalogue or market definition) is stored in a JSON file named `<market id>.json`.
+1. Market metadata (market catalogue or market definition) is stored in a JSON file named `<market id>.json`, or a file named `metadata.json`, which holds market metadata for all market data files in that directory.
 2. Market data file (containing stream data) is stored in the same folder as the market metadata file. It shares the same basename `<market id>` and ends with `.zip`, `.gz` or `.bz2`, or it has no extension (uncompressed data).
 
 A sample database structure is shown below:
@@ -49,7 +49,14 @@ my_betfair_data/
     ├── 1.22334455  # Uncompressed market data file
     ├── 1.55667788.json  # Market metadata file
     └── 1.55667788.zip  # Compressed market data file
+├── other_folder/
+    ├── metadata.json  # Bulk market metadata file
+    ├── 1.88776655
+    ├── 1.55443322
+    ├── 1.99884433
 ```
+
+`metadata.json` file should contain a list of dictionaries, with each dictionary holding the contents of an individual market metadata file. This is the recommended way to store metadata as it improves indexing performance and reduces the occupied disk space.
 
 If a market metadata file is missing, it will be created from the most recent market definition found in the market data file. If no market definition is present in the data file, it will not be possible to index the file.
 

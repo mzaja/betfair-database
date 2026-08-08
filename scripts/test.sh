@@ -4,18 +4,24 @@
 # ============================================================
 set -e
 pushd "$(dirname "$0")/.." > /dev/null
-coverage run  # Check .coveragerc for implicit parameters
 
-set +e
-coverage report  # Allowed to fail if coverage is below 100 %
-if [ $? -ne 0 ]; then
-    # Only generate and display HTML report if coverage is below 100 %
-    coverage html
-    firefox htmlcov/index.html
-fi
-
-set -e
 # Check formatting
 black --check betfairdatabase tests
 isort --check betfairdatabase tests
+
+# Obtain coverage and generate report to check cover percentage
+# Check .coveragerc for implicit parameters
+coverage run
+rc=0
+coverage report || rc=$?  # Avoid immediate failure via set -e
+if [ $rc -ne 0 ]; then
+    # If code coverage is below 100 %
+    if [ -z $GITHUB_ACTIONS ]; then
+        # Generate and display HTML report if the script is not running on the CI
+        coverage html
+        firefox htmlcov/index.html
+    fi
+    exit $rc  # Fail now because the coverage is below 100 %
+fi
+
 popd > /dev/null

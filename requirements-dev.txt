@@ -7,3 +7,4 @@ coverage
 coveralls
 isort==8.0.1
 pre-commit
+twine

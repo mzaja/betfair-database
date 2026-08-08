@@ -1,5 +1,9 @@
 # Release History
 
+## 1.4.1 (2026-08-08)
+### Improvements
+- Readme updated to demonstrate the use of a `metadata.json` file.
+
 ## 1.4.0 (2026-08-08)
 ### Improvements
 - Market metadata for a whole directory can be parsed from a single `metadata.json` file.

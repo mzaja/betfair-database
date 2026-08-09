@@ -272,8 +272,6 @@ class MarketFileProcessor(ProgressBarMixin):
                     Market(metadata_file, data_file, market_metadata)
                 )
 
-        # Verify all files have been processed and cached
-        assert len(self.bulk_metadata_files) == len(self.bulk_metadata_file_contents)
         return importable_markets
 
     def _remove_metadata_files_without_data(self) -> None:

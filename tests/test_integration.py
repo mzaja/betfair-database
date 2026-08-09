@@ -8,6 +8,7 @@ from betfairdatabase.const import (
     INDEX_FILENAME,
     MARKET_DATA_FILE_PATH,
     MARKET_METADATA_FILE_PATH,
+    METADATA_FILE_NAME,
 )
 from betfairdatabase.exceptions import (
     DatabaseDirectoryError,
@@ -121,19 +122,37 @@ class TestIntegrationPart1(TestIntegrationBase):
         market_id_no_data = "1.199967351"
         self.assertNotIn(market_id_no_data, [m["marketId"] for m in markets])
 
-        # Market metadata is generated for data files missing them (4 of them)
-        metadata_files = list(self.test_data_dir.rglob("1.*.json"))
-        self.assertEqual(len(metadata_files) - len(self.metadata_source_files), 4)
-        imported_metadata_files = [
-            p for p in metadata_files if p.name != f"{market_id_no_data}.json"
+        # Individual market metadata files were not created for official markets
+        individual_metadata_files = list(self.test_data_dir.rglob("1.*.json"))
+        self.assertEqual(
+            len(individual_metadata_files), len(self.metadata_source_files)
+        )
+
+        # One metadata.json file was created for all official markets
+        bulk_metadata_files = list(self.test_data_dir.rglob(METADATA_FILE_NAME))
+        self.assertEqual(len(bulk_metadata_files), 1)
+
+        # All importable markets have been imported
+        imported_individual_metadata_files = [
+            p
+            for p in individual_metadata_files
+            if p.name != f"{market_id_no_data}.json"
         ]
-        self.assertEqual(len(imported_metadata_files), self.DATABASE_SIZE)
+        valid_files_without_metadata_files = 4  # 4 official .bz2 files
+        self.assertEqual(
+            len(imported_individual_metadata_files)
+            + valid_files_without_metadata_files,
+            self.DATABASE_SIZE,
+        )
 
         # Test that column names wholly match the specification
         for market in markets:
             self.assertEqual(list(market.keys()), bfdb.columns())
 
         # Check that paths to files are absolute and correct.
+        imported_metadata_files = imported_individual_metadata_files + list(
+            self.test_data_dir.rglob(METADATA_FILE_NAME)
+        )
         for market in markets:
             self.assertIn(
                 path := Path(market[MARKET_METADATA_FILE_PATH]), imported_metadata_files

@@ -101,9 +101,15 @@ class TestBetfairDatabase(TestLoggingBase):
             database = BetfairDatabase(db_dir)
             database.index()
 
-            # Check that the expected number of metadata files has been created and imported
-            metadata_files = list(db_dir.glob("1.*.json"))
-            self.assertEqual(len(metadata_files), IMPORTABLE_MARKETS_COUNT)
+            # Check that individual market metadata files were not created
+            individual_metadata_files = list(db_dir.glob("1.*.json"))
+            self.assertEqual(len(individual_metadata_files), 0)
+
+            # Check that one metadata.json file has been created
+            bulk_metadata_files = list(db_dir.glob(METADATA_FILE_NAME))
+            self.assertEqual(len(bulk_metadata_files), 1)
+
+            # Check that the correct number of markets has been imported
             markets = database.select()
             self.assertEqual(len(markets), IMPORTABLE_MARKETS_COUNT)
 
@@ -276,6 +282,64 @@ class TestBetfairDatabase(TestLoggingBase):
                 # Test reindexing message
                 database.index(force=True)
                 self.assertIn("Overwriting an existing index", logs.records[0].message)
+
+    def test_metadata_file_generation_and_update(self):
+        """
+        Tests updating an existing metadata.json file when extracting market definitions.
+        Also tests debug logging.
+        """
+        MARKETS_IMPORTED = 9
+        logger.setLevel(level=logging.DEBUG)
+        with (
+            TestFixture(
+                Datasets(official=True, bulk_metadata=True), flatten=True
+            ) as db_dir,
+            self.assertLogs(level=logging.DEBUG) as logs,
+        ):
+            individual_metadata_files = list(db_dir.glob("1.*.json"))
+            metadata_file_contents = json.loads(
+                (db_dir / METADATA_FILE_NAME).read_bytes()
+            )
+            self.assertEqual(len(metadata_file_contents), 3)
+
+            # Indexing the database for the first time
+            database = BetfairDatabase(db_dir)
+            database.index()
+
+            # All markets have been imported
+            self.assertEqual(len(database.select()), MARKETS_IMPORTED)
+
+            # Check metadata file has been updated
+            metadata_file_contents = json.loads(
+                (db_dir / METADATA_FILE_NAME).read_bytes()
+            )
+            self.assertEqual(
+                len(metadata_file_contents),
+                MARKETS_IMPORTED - len(individual_metadata_files),
+            )
+
+        # Check debug message (required for 100 % coverage)
+        debug_messages = sorted(
+            r.message for r in logs.records if r.levelno == logging.DEBUG
+        )
+        self.assertEqual(
+            len([msg for msg in debug_messages if msg.startswith("Adding")]),
+            MARKETS_IMPORTED,
+        )
+        self.assertIsNotNone(
+            next(
+                (
+                    msg
+                    for msg in debug_messages
+                    if f"{METADATA_FILE_NAME}' already exists and will be updated"
+                ),
+                None,
+            )
+        )
+        msg = next(
+            msg for msg in debug_messages if msg.startswith("Generated metadata file")
+        )
+        self.assertIn(METADATA_FILE_NAME, msg)
 
     @mock.patch("betfairdatabase.utils.tqdm")
     def test_progress_bar(self, mock_tqdm: mock.MagicMock):

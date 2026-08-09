@@ -6,16 +6,15 @@ from os import SEEK_SET
 from pathlib import Path
 from zipfile import ZipFile
 
-from betfairdatabase.const import ENCODING_UTF_8, MARKET_ID
+from betfairdatabase.const import MARKET_ID
 from betfairdatabase.exceptions import MarketDefinitionMissingError
-from betfairdatabase.utils import read_last_line_in_a_file
+from betfairdatabase.utils import read_last_line_in_a_file, write_to_json
 
 # ---------------------------------------------------------------------------
 # CONSTANTS
 # ---------------------------------------------------------------------------
 MARKET_DEFINITION = "marketDefinition"
 MARKET_DEFINITION_BYTES = MARKET_DEFINITION.encode()
-JSON_SEPARATORS = (",", ":")  # Eliminate unnecessary whitespace
 
 
 # ---------------------------------------------------------------------------
@@ -31,15 +30,11 @@ def ZipFileWrapper(market_data_file: Path):
 
 class MarketDefinitionProcessor:
     """
-    Extracts market definitions from market data files and stores them in a JSON file.
+    Extracts market definitions from market data files.
     """
 
     # Store supported decompressors in this dict
     DECOMPRESSORS = {".bz2": BZ2File, ".gz": GzipFile, ".zip": ZipFileWrapper}
-
-    def __init__(self, cache_parsed_definitions: bool):
-        self.cache_parsed_definitions = cache_parsed_definitions
-        self.parsed_definitions = {}
 
     @staticmethod
     def _find_last_market_definition_line(lines: list[bytes]) -> bytes | None:
@@ -54,7 +49,8 @@ class MarketDefinitionProcessor:
                 return line
         return None
 
-    def parse_market_definition(self, market_data_file: Path) -> dict:
+    @classmethod
+    def parse_market_definition(cls, market_data_file: Path) -> dict:
         """
         Reads a market data file and parses the market definition.
         Accepts both compressed and plaintext files.
@@ -65,10 +61,10 @@ class MarketDefinitionProcessor:
         Raises MarketDefinitionMissingError if the market definition is not found.
         """
         line = None
-        decompressor = self.DECOMPRESSORS.get(market_data_file.suffix, None)
+        decompressor = cls.DECOMPRESSORS.get(market_data_file.suffix, None)
         if decompressor is not None:
             with decompressor(market_data_file) as f:
-                line = self._find_last_market_definition_line(f.readlines())
+                line = cls._find_last_market_definition_line(f.readlines())
         else:
             # With plaintext files, try the shortcut of reading the last line first.
             # If that does not locate the market definition, read and search the whole file.
@@ -76,7 +72,7 @@ class MarketDefinitionProcessor:
                 line = read_last_line_in_a_file(f)
                 if MARKET_DEFINITION_BYTES not in line:
                     f.seek(0, SEEK_SET)  # Move back to the beginning of the file
-                    line = self._find_last_market_definition_line(f.readlines())
+                    line = cls._find_last_market_definition_line(f.readlines())
 
         if line is None:
             raise MarketDefinitionMissingError(market_data_file)
@@ -85,30 +81,3 @@ class MarketDefinitionProcessor:
         market_definition = market_change_message[MARKET_DEFINITION]
         market_definition[MARKET_ID] = market_change_message["id"]  # Inject market ID
         return market_definition
-
-    def create_market_definition_file(
-        self, market_data_file: Path, overwrite: bool = False
-    ) -> Path:
-        """
-        Creates a market definition file from the market data file and
-        stores it in the same directory as <market_id>.json.
-        Returns the path to the generated market definition file.
-
-        Processing is skipped altogether if a file with the same name already exists,
-        unless overwrite=True is provided.
-        """
-        # This method will generally not be called with an existing market catalogue
-        output_file = (
-            market_data_file.with_suffix(".json")
-            if len(market_data_file.suffixes) == 2
-            else (market_data_file.with_suffix(market_data_file.suffix + ".json"))
-        )
-        if overwrite or not output_file.exists():
-            metadata = self.parse_market_definition(market_data_file)
-            if self.cache_parsed_definitions:
-                self.parsed_definitions[output_file] = metadata
-            output_file.write_text(
-                json.dumps(metadata, separators=JSON_SEPARATORS),
-                encoding=ENCODING_UTF_8,
-            )
-        return output_file

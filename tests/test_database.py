@@ -297,6 +297,7 @@ class TestBetfairDatabase(TestLoggingBase):
             self.assertLogs(level=logging.DEBUG) as logs,
         ):
             individual_metadata_files = list(db_dir.glob("1.*.json"))
+            data_files = [p for p in db_dir.glob("1.*") if p.suffix != ".json"]
             metadata_file_contents = json.loads(
                 (db_dir / METADATA_FILE_NAME).read_bytes()
             )
@@ -310,12 +311,20 @@ class TestBetfairDatabase(TestLoggingBase):
             self.assertEqual(len(database.select()), MARKETS_IMPORTED)
 
             # Check metadata file has been updated
-            metadata_file_contents = json.loads(
+            metadata_file_contents: list[dict] = json.loads(
                 (db_dir / METADATA_FILE_NAME).read_bytes()
             )
             self.assertEqual(
                 len(metadata_file_contents),
                 MARKETS_IMPORTED - len(individual_metadata_files),
+            )
+            # Check that all the expected market IDs are present inside metadata.json
+            # There are no uncompressed market data files in this test's dataset
+            market_ids = set(p.stem for p in data_files) - set(
+                p.stem for p in individual_metadata_files
+            )
+            self.assertEqual(
+                market_ids, set(m[MARKET_ID] for m in metadata_file_contents)
             )
 
         # Check debug message (required for 100 % coverage)

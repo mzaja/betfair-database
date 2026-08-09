@@ -1,21 +1,34 @@
 import datetime as dt
+import json
 import logging
 from io import BufferedReader
 from os import SEEK_CUR, SEEK_END
-from typing import Iterable, TypeVar
+from pathlib import Path
+from typing import Any, Iterable, TypeVar
 from zoneinfo import ZoneInfo
 
 from tqdm import tqdm
 
+from betfairdatabase.const import ENCODING_UTF_8
+
 # ---------------------------------------------------------------------------
 # CONSTANTS
 # ---------------------------------------------------------------------------
+JSON_SEPARATORS = (",", ":")  # Eliminate unnecessary whitespace
 REVERSE_READ_STEP = 64 * 1024  # Characters to start reading a file from reverse
 
 
 # ---------------------------------------------------------------------------
 # FUNCTIONS
 # ---------------------------------------------------------------------------
+def write_to_json(file: Path, contents: Any) -> int:
+    """Writes the contents to a JSON file."""
+    file.write_text(
+        json.dumps(contents, separators=JSON_SEPARATORS),
+        encoding=ENCODING_UTF_8,
+    )
+
+
 def parse_datetime(datetime_str: str) -> dt.datetime:
     """
     Parses Betfair's ISO 8601 datetime format.

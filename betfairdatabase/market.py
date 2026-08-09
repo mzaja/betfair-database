@@ -47,14 +47,15 @@ class Market:
         - move : Moves market metadata and data files to the destination. Updates paths.
     """
 
-    def __init__(self, market_metadata_file: Path, market_data_file: Path):
+    def __init__(
+        self,
+        market_metadata_file: Path,
+        market_data_file: Path,
+        metadata: dict | None = None,
+    ):
         self.market_metadata_file = market_metadata_file
         self.market_data_file = market_data_file
         self.sql_action = SQLAction.INSERT
-        self._attached_metadata = None
-
-    def attach_metadata(self, metadata: dict | None) -> None:
-        """Attaches metadata to skip opening and parsing the metadata file."""
         self._attached_metadata = metadata
 
     @cached_property

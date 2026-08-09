@@ -1,6 +1,7 @@
 import json
 import logging
 import sqlite3
+from collections import defaultdict
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
@@ -21,7 +22,11 @@ from betfairdatabase.exceptions import (
 from betfairdatabase.market import Market
 from betfairdatabase.marketdef import MarketDefinitionProcessor
 from betfairdatabase.racing import RacingDataProcessor
-from betfairdatabase.utils import ProgressBarMixin, is_debug_logging_enabled
+from betfairdatabase.utils import (
+    ProgressBarMixin,
+    is_debug_logging_enabled,
+    write_to_json,
+)
 
 # ---------------------------------------------------------------------------
 # LOGGING
@@ -94,6 +99,8 @@ class MarketFileProcessor(ProgressBarMixin):
     of that method into smaller, more manageable methods.
     """
 
+    INVALID = object()  # Sentinel for invalid metadata.json contents
+
     def __init__(
         self,
         database_dir: str | Path,
@@ -103,14 +110,12 @@ class MarketFileProcessor(ProgressBarMixin):
         self.database_dir = Path(database_dir)
         self.counters = Counters()
         self.racing_data_processor = RacingDataProcessor()
-        self.market_definition_processor = MarketDefinitionProcessor(
-            cache_parsed_definitions=True
-        )
         self.debug_logging_enabled = is_debug_logging_enabled(logger)
         # Initialise file caches
         self.metadata_files: dict[Path, Path] = {}  # Market catalogues/definitions
         self.data_files: dict[Path, Path] = {}  # Stream files
         self.bulk_metadata_files: list[Path] = []  # metadata.json files
+        self.bulk_metadata_file_contents: dict[Path, dict | None] = {}
 
     def index_database(self, connection: sqlite3.Connection) -> int:
         """
@@ -140,8 +145,6 @@ class MarketFileProcessor(ProgressBarMixin):
         Main routine of this class.
         Called by the public methods `index_database` and `update_database`.
         """
-        action = "importing" if args else "indexing"
-
         # Locate files for processing
         self._locate_data_and_metadata_files(Path(source_dir))
         self.counters.total_markets = len(
@@ -149,16 +152,28 @@ class MarketFileProcessor(ProgressBarMixin):
         )
 
         # Process metadata.json files
-        importable_markets_1 = self._process_bulk_metadata_files()
+        # Slims down self.data_files and makes the next call potentially faster
+        markets_1 = self._process_bulk_metadata_files()
+
+        # Slims down self.metadata_files and makes the next call potentially faster
+        self._remove_metadata_files_without_data()
+
+        # Process market data files without a dedicated metadata file by opening
+        # them and generating metadata.json from market definitions.
+        # Slims down self.data_files and makes the next call potentially faster
+        markets_2 = self._process_markets_without_metadata_files()
 
         # Process individual market metadata files (catalogues and market definitions)
-        self._remove_metadata_files_without_data()
-        self._create_missing_metadata_files()
-        importable_markets_2 = self._process_market_metadata_files()
+        markets_3 = self._process_market_metadata_files()
+
+        # Load the racing data processor (culprit for high RAM usage)
+        importable_markets = markets_1 + markets_2 + markets_3
+        for market in importable_markets:
+            self.racing_data_processor.add(market)
 
         # Import markets into the database, optionally moving or copying files if needed
-        importable_markets = importable_markets_1 + importable_markets_2
         self._import_markets_into_database(importable_markets, connection, *args)
+        action = "importing" if args else "indexing"
         self.counters.log_info(action)
         return self.counters.rows_inserted
 
@@ -167,7 +182,7 @@ class MarketFileProcessor(ProgressBarMixin):
         Locates market data and metadata files in the source directory,
         linking them using a common dictionary key.
 
-        Sets attributes: `self.metadata_files`, `self.data_files`.
+        Sets attributes: `self.metadata_files`, `self.data_files`, `self.bulk_metadata_files`.
         """
         data_file_suffixes = list(DATA_FILE_SUFFIXES)
         data_file_suffixes.remove("")
@@ -209,18 +224,21 @@ class MarketFileProcessor(ProgressBarMixin):
         ):
             # Parse contents
             try:
-                file_entries: list[dict] = json.loads(metadata_file.read_bytes())
+                cache_value = file_entries = json.loads(metadata_file.read_bytes())
+                if not isinstance(file_entries, list):
+                    cache_value = self.INVALID
+                    logger.error(
+                        "'%s' should be a list of dicts, not a %s.",
+                        metadata_file,
+                        file_entries.__class__.__name__,
+                    )
             except JSONDecodeError:
+                cache_value = self.INVALID
                 # self.counters.corrupt_files += 1  # Would not pass validation
                 logger.error("Error parsing '%s'.", metadata_file)
-                continue
 
-            if not isinstance(file_entries, list):
-                logger.error(
-                    "'%s' should be a list of dicts, not a %s.",
-                    metadata_file,
-                    file_entries.__class__.__name__,
-                )
+            self.bulk_metadata_file_contents[metadata_file] = cache_value
+            if cache_value is self.INVALID:
                 continue
 
             # Process contents
@@ -250,10 +268,9 @@ class MarketFileProcessor(ProgressBarMixin):
                         market_id,
                     )
                     continue
-                market = Market(metadata_file, data_file)
-                market.attach_metadata(market_metadata)
-                self.racing_data_processor.add(market)
-                importable_markets.append(market)
+                importable_markets.append(
+                    Market(metadata_file, data_file, market_metadata)
+                )
 
         return importable_markets
 
@@ -273,32 +290,100 @@ class MarketFileProcessor(ProgressBarMixin):
                 # Delete all metadata files without a corresponding data file
                 del self.metadata_files[key]
 
-    def _create_missing_metadata_files(self) -> None:
+    @staticmethod
+    def _backup_a_file(file: Path) -> Path:
+        """
+        Creates a backup file by appending .bak to the file name.
+        If the backup file already exists, it gets replaced.
+        """
+        backup_file_name = file.with_suffix(file.suffix + ".bak")
+        return file.replace(backup_file_name)
+
+    def _parse_market_definitions_from_streams(
+        self, data_files_without_metadata: dict[Path, Path]
+    ) -> defaultdict[Path, dict[str, dict]]:
+        """
+        Parses market definitions from market data files and returns them
+        in a mutlilevel dict: `{dir_path: {market_id: market_def}}`.
+        """
+        parsed_market_defs = defaultdict(dict)
+        for stem_path, data_file in self._progress_bar(
+            data_files_without_metadata.items(), "Creating metadata files"
+        ):
+            try:
+                parsed_market_defs[stem_path.parent][stem_path.name] = (
+                    MarketDefinitionProcessor.parse_market_definition(data_file)
+                )
+            except MarketDefinitionMissingError:
+                del self.data_files[stem_path]
+                self.counters.markets_without_metadata += 1
+                logger.error("Market definition missing in '%s'.", data_file)
+            except JSONDecodeError:
+                del self.data_files[stem_path]
+                self.counters.corrupt_files += 1
+                logger.error("Error parsing '%s'.", data_file)
+        return parsed_market_defs
+
+    def _create_missing_metadata_files(
+        self, parsed_market_defs: defaultdict[Path, dict[str, dict]]
+    ) -> None:
         """Creates missing metadata files for data files missing them."""
+        # Generate metadata.json files
+        for file_dir, market_defs in parsed_market_defs.items():
+            file = file_dir / METADATA_FILE_NAME
+            # existing_data can be:
+            # 1. INVALID: Not a list or not even JSON.
+            # 2. None: The file does not exist.
+            # 3. Valid data otherwise.
+            metadata = self.bulk_metadata_file_contents.pop(file, None)
+            if metadata is self.INVALID:  # The file exists but cannot be parsed
+                backup_file = self._backup_a_file(file)
+                logger.info(
+                    "'%s' could not be updated and was renamed to '%s' to avoid overwriting it.",
+                    file,
+                    backup_file,
+                )
+                metadata = []
+            elif metadata is None:  # The file does not exist
+                metadata = []
+            else:  # The file contains valid data and can be updated
+                if self.debug_logging_enabled:
+                    logger.debug("'%s' already exists and will be updated.", file)
+
+            metadata.extend(market_defs.values())  # Merge metadata
+            write_to_json(file, metadata)  # (Over)write metadata.json file
+            if self.debug_logging_enabled:
+                logger.debug("Generated metadata file '%s'.", file)
+
+    def _process_markets_without_metadata_files(self) -> list[Market]:
+        """
+        1. Extracts market metadata from the market definition embedded inside market
+        data files, if present.
+        2. Updates existing metadata.json files.
+        3. Returns a list of Market objects ready for import.
+        """
+        # Identify files for which this procedure needs to be performed
         data_files_without_metadata = {
             stem_path: full_path
             for stem_path, full_path in self.data_files.items()
             if stem_path not in self.metadata_files
         }
-        for key, data_file in self._progress_bar(
-            data_files_without_metadata.items(), "Creating metadata files"
-        ):
-            try:
-                metadata_file = (
-                    self.market_definition_processor.create_market_definition_file(
-                        data_file
-                    )
-                )
-                # Add the generated metadata file to registry
-                self.metadata_files[key] = metadata_file
-                if self.debug_logging_enabled:
-                    logger.debug("Created metadata file for '%s'.", data_file)
-            except MarketDefinitionMissingError:
-                self.counters.markets_without_metadata += 1
-                logger.error("Market definition missing in '%s'.", data_file)
-            except JSONDecodeError:
-                self.counters.corrupt_files += 1
-                logger.error("Error parsing '%s'.", data_file)
+        # Parse market definitions from stream files
+        parsed_market_defs = self._parse_market_definitions_from_streams(
+            data_files_without_metadata
+        )
+        # Generate metadata.json files (or update existing)
+        self._create_missing_metadata_files(parsed_market_defs)
+        # Return importable Market objects
+        return [
+            Market(
+                file_dir / METADATA_FILE_NAME,
+                data_files_without_metadata[file_dir / market_id],
+                metadata,
+            )
+            for file_dir, subdict in parsed_market_defs.items()
+            for market_id, metadata in subdict.items()
+        ]
 
     def _process_market_metadata_files(self) -> list[Market]:
         """
@@ -313,20 +398,10 @@ class MarketFileProcessor(ProgressBarMixin):
         for market in self._progress_bar(
             markets_gen, "Processing markets", total=len(self.metadata_files)
         ):
-            # If market definition has already been parsed, attach it rather
-            # than opening and parsing the market definition file again
-            market.attach_metadata(
-                self.market_definition_processor.parsed_definitions.pop(
-                    market.market_metadata_file, None
-                )
-            )
             try:
-                # Racing data processor triggers the parsing of the market metadata
-                # because it needs to check whether this is a racing market.
-                # Non-racing markets are ignored by the racing data processor.
-                self.racing_data_processor.add(market)
-                # No error parsing the market metadata means it is importable
-                importable_markets.append(market)
+                # Trigger metadata parsing to determine whether the market is importable
+                market.metadata  # Trigger metadata parsing
+                importable_markets.append(market)  # Metadata parsed
             except JSONDecodeError:
                 self.counters.corrupt_files += 1
                 logger.error("Error parsing '%s'.", market.market_metadata_file)

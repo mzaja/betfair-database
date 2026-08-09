@@ -299,7 +299,7 @@ class MarketFileProcessor(ProgressBarMixin):
         If the backup file already exists, it gets replaced.
         """
         backup_file_name = file.with_suffix(file.suffix + ".bak")
-        return file.move(backup_file_name)
+        return file.replace(backup_file_name)
 
     def _parse_market_definitions_from_streams(
         self, data_files_without_metadata: dict[Path, Path]

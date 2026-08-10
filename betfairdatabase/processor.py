@@ -5,7 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Callable, Literal, NamedTuple
+from typing import Callable, Literal, NamedTuple, TypeVar
 
 from betfairdatabase.const import (
     DATA_FILE_SUFFIXES,

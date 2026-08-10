@@ -112,7 +112,7 @@ class MarketFileProcessor(ProgressBarMixin):
     of that method into smaller, more manageable methods.
     """
 
-    INVALID = object()  # Sentinel for invalid metadata.json contents
+    INVALID = TypeVar("INVALID")  # Sentinel for invalid metadata.json contents
 
     def __init__(
         self,
@@ -157,10 +157,15 @@ class MarketFileProcessor(ProgressBarMixin):
         files = self._locate_data_and_metadata_files(Path(source_dir))
         counters.total_markets = len(set(files.data) | set(files.individual_metadata))
 
+        # Parse metadata.json files
+        bulk_metadata_file_contents = self._parse_bulk_metadata_files(
+            files.bulk_metadata
+        )
+
         # Process metadata.json files
         # Slims down data files and makes the next call potentially faster
-        markets_1, bulk_metadata_file_contents = self._process_bulk_metadata_files(
-            files.bulk_metadata, files.data
+        markets_1 = self._process_bulk_metadata_files(
+            files.data, bulk_metadata_file_contents
         )
 
         # Slims down individual_metadata files and makes the next call potentially faster
@@ -221,11 +226,37 @@ class MarketFileProcessor(ProgressBarMixin):
                 bulk_metadata_files.append(file)
         return MarketFiles(data_files, individual_metadata_files, bulk_metadata_files)
 
+    def _parse_bulk_metadata_files(
+        self, bulk_metadata_files: list[Path]
+    ) -> dict[Path, list[dict] | INVALID]:
+        """Parses bulk metadata files and returns a lookup `{file_path: data}`."""
+        bulk_metadata_file_contents = {}
+        for file in self._progress_bar(
+            bulk_metadata_files, f"Processing {METADATA_FILE_NAME} files"
+        ):
+            # Parse contents
+            try:
+                cache_value = contents = json.loads(file.read_bytes())
+                if not isinstance(contents, list):
+                    cache_value = self.INVALID
+                    logger.error(
+                        "'%s' should be a list of dicts, not a %s.",
+                        file,
+                        contents.__class__.__name__,
+                    )
+            except JSONDecodeError:
+                cache_value = self.INVALID
+                # counters.corrupt_files += 1  # Would not pass validation
+                logger.error("Error parsing '%s'.", file)
+
+            bulk_metadata_file_contents[file] = cache_value
+        return bulk_metadata_file_contents
+
     def _process_bulk_metadata_files(
         self,
-        bulk_metadata_files: list[Path],
         data_files: dict[Path, Path],
-    ) -> tuple[list[Market], dict[Path, dict | None]]:
+        bulk_metadata_file_contents: dict[Path, list[dict] | INVALID],
+    ) -> list[Market]:
         """
         Processes bulk metadata (metadata.json) files. Returns a list of importable
         market objects with the metadata attached.
@@ -237,39 +268,23 @@ class MarketFileProcessor(ProgressBarMixin):
         `<market_id>.json` files are skipped in case of metadata source duplication.
         """
         importable_markets = []
-        bulk_metadata_file_contents = {}
-        for metadata_file in self._progress_bar(
-            bulk_metadata_files, f"Processing {METADATA_FILE_NAME} files"
+        for metadata_file, file_contents in self._progress_bar(
+            bulk_metadata_file_contents.items(),
+            f"Processing {METADATA_FILE_NAME} files",
         ):
-            # Parse contents
-            try:
-                cache_value = file_entries = json.loads(metadata_file.read_bytes())
-                if not isinstance(file_entries, list):
-                    cache_value = self.INVALID
-                    logger.error(
-                        "'%s' should be a list of dicts, not a %s.",
-                        metadata_file,
-                        file_entries.__class__.__name__,
-                    )
-            except JSONDecodeError:
-                cache_value = self.INVALID
-                # counters.corrupt_files += 1  # Would not pass validation
-                logger.error("Error parsing '%s'.", metadata_file)
-
-            bulk_metadata_file_contents[metadata_file] = cache_value
-            if cache_value is self.INVALID:
+            if file_contents is self.INVALID:
                 continue
 
-            # Process contents
-            file_cache: dict[str, dict] = {}
-            for market_metadata in file_entries:
+            # Generate a lookup {market_id: market_metadata}
+            file_metadata_cache: dict[str, dict] = {}
+            for market_metadata in file_contents:
                 try:
-                    file_cache[market_metadata[MARKET_ID]] = market_metadata
+                    file_metadata_cache[market_metadata[MARKET_ID]] = market_metadata
                 except (KeyError, TypeError):
                     pass  # A warning is logged below
 
             # Check for invalid entries in the metadata file
-            invalid_entries_count = len(file_entries) - len(file_cache)
+            invalid_entries_count = len(file_contents) - len(file_metadata_cache)
             if invalid_entries_count:
                 logger.error(
                     "'%s' contains %d invalid entries",
@@ -277,7 +292,7 @@ class MarketFileProcessor(ProgressBarMixin):
                     invalid_entries_count,
                 )
 
-            for market_id, market_metadata in file_cache.items():
+            for market_id, market_metadata in file_metadata_cache.items():
                 data_file = data_files.pop(metadata_file.parent / market_id, None)
                 if data_file is None:
                     logger.error(
@@ -291,7 +306,7 @@ class MarketFileProcessor(ProgressBarMixin):
                     Market(metadata_file, data_file, market_metadata)
                 )
 
-        return importable_markets, bulk_metadata_file_contents
+        return importable_markets
 
     def _remove_metadata_files_without_data(
         self,

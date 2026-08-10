@@ -1,4 +1,3 @@
-import json
 import logging
 import sqlite3
 from collections import defaultdict
@@ -25,6 +24,7 @@ from betfairdatabase.racing import RacingDataProcessor
 from betfairdatabase.utils import (
     ProgressBarMixin,
     is_debug_logging_enabled,
+    read_json,
     write_to_json,
 )
 
@@ -236,7 +236,7 @@ class MarketFileProcessor(ProgressBarMixin):
         ):
             # Parse contents
             try:
-                cache_value = contents = json.loads(file.read_bytes())
+                cache_value = contents = read_json(file)
                 if not isinstance(contents, list):
                     cache_value = self.INVALID
                     logger.error(

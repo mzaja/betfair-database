@@ -9,11 +9,10 @@ from zoneinfo import ZoneInfo
 
 from tqdm import tqdm
 
-from betfairdatabase.const import ENCODING_UTF_8
-
 # ---------------------------------------------------------------------------
 # CONSTANTS
 # ---------------------------------------------------------------------------
+ENCODING_UTF_8 = "utf-8"
 JSON_SEPARATORS = (",", ":")  # Eliminate unnecessary whitespace
 REVERSE_READ_STEP = 64 * 1024  # Characters to start reading a file from reverse
 
@@ -21,6 +20,11 @@ REVERSE_READ_STEP = 64 * 1024  # Characters to start reading a file from reverse
 # ---------------------------------------------------------------------------
 # FUNCTIONS
 # ---------------------------------------------------------------------------
+def read_json(file: Path) -> Any:
+    """Reads a JSON file and returns the contents."""
+    return json.loads(file.read_text(encoding=ENCODING_UTF_8))
+
+
 def write_to_json(file: Path, contents: Any) -> int:
     """Writes the contents to a JSON file."""
     file.write_text(

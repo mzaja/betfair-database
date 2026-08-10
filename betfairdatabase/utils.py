@@ -113,6 +113,7 @@ class ProgressBarMixin:
         name: str,
         unit: str = "markets",
         total: int | None = None,
+        **kwargs,
     ) -> Iterable[T]:
         """Applies the progress bar to the iterable."""
         if not self.progress_bar_enabled:
@@ -120,4 +121,4 @@ class ProgressBarMixin:
         else:
             if not unit.startswith(" "):
                 unit = " " + unit
-            return tqdm(iterable, desc=name, unit=unit, total=total)
+            return tqdm(iterable, desc=name, unit=unit, total=total, **kwargs)

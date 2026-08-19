@@ -455,7 +455,7 @@ class TestBulkMetadataFile(TestLoggingBase):
         self.assertEqual(len(data), 4)
         self.assertEqual(
             {x[MARKET_ID] for x in data},
-            {"1.197931750", "1.197931751", "1.201590187", "1.214870442"},
+            {"1.209492554", "1.209492555", "1.209492556", "1.209492557"},
         )
 
     def test_file_decode_error(self):
@@ -480,7 +480,7 @@ class TestBulkMetadataFile(TestLoggingBase):
         an entry for a nonexistent market data file.
         """
         with (self.assertLogs(level=logging.ERROR) as logs,):
-            data_file = self.dataset_dir / "1.197931750.zip"
+            data_file = self.dataset_dir / "1.209492557.zip"
             data_file.unlink()
             database = BetfairDatabase(self.db_dir)
             database.index()

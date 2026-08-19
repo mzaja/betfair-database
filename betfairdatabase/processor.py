@@ -10,8 +10,9 @@ from betfairdatabase.const import (
     SQLAction,
 )
 from betfairdatabase.market import Market
+from betfairdatabase.metrics import Counters
 from betfairdatabase.racing import RacingDataProcessor
-from betfairdatabase.tree import Counters, DirectoryParser
+from betfairdatabase.tree import DirectoryParser
 from betfairdatabase.utils import (
     ProgressBarMixin,
     is_debug_logging_enabled,

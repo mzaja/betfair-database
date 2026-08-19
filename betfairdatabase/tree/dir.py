@@ -1,5 +1,4 @@
 import logging
-from collections import Counter
 from dataclasses import dataclass, field
 from json import JSONDecodeError
 from pathlib import Path
@@ -16,8 +15,8 @@ from betfairdatabase.exceptions import (
 from betfairdatabase.market import Market
 from betfairdatabase.marketdef import MarketDefinitionProcessor
 from betfairdatabase.metrics import Counters
+from betfairdatabase.tree.metadatafile import BulkMetadataFile
 from betfairdatabase.utils import (
-    create_backup,
     read_json,
     write_to_json,
 )
@@ -38,7 +37,7 @@ class DatabaseDirectory:
     path: Path
     data_files: list[Path] = field(default_factory=list)
     individual_metadata_files: list[Path] = field(default_factory=list)
-    bulk_metadata_file: Path | None = None
+    bulk_metadata_file: BulkMetadataFile | None = None
     generate_metadata_file: bool = field(default=False, init=False)
     corrupt_markets: set = field(default_factory=set, init=False)
 
@@ -62,82 +61,19 @@ class DatabaseDirectory:
         """
         metadata_lookup = {}
         if self.bulk_metadata_file:
-            file_data = self._parse_json_and_log_error(self.bulk_metadata_file)
-            if not isinstance(file_data, list):
-                # Data is not valid and cannot be updated
-                if file_data is not None:
-                    # File could be parsed, but the expected data type is wrong
-                    logger.error(
-                        "'%s' should be a list of dicts, not a %s.",
-                        self.bulk_metadata_file,
-                        file_data.__class__.__name__,
-                    )
-                # Backup this file because it will get overwritten otherwise
-                # and some data might get lost
-                backup_file = create_backup(self.bulk_metadata_file)
-                logger.warning(
-                    "'%s' could not be processed and was renamed to '%s'.",
-                    self.bulk_metadata_file,
-                    backup_file,
+            metadata_lookup = self.bulk_metadata_file.parse_and_validate()
+
+            # Check if any market data files are missing
+            missing_data_files = set(metadata_lookup).difference(
+                self._get_market_id(f) for f in self.data_files
+            )
+            if missing_data_files:
+                logger.error(
+                    "'%s' contains an entry for market IDs %s, "
+                    "but matching market data files cannot be found in the directory.",
+                    self.bulk_metadata_file.path,
+                    sorted(missing_data_files),
                 )
-                # Update state, just in case another call is made
-                self.bulk_metadata_file = None
-            elif file_data:  # It's a non-empty list -> validate and warn of violations
-                market_ids = [
-                    elem.get(MARKET_ID) for elem in file_data if isinstance(elem, dict)
-                ]
-                # Checks all elements are dicts
-                if len(market_ids) < len(file_data):
-                    logger.warning(
-                        "'%s' contains list elements which are not dicts.",
-                        self.bulk_metadata_file,
-                    )
-                # Check all elements contain a market ID field
-                if not all(market_ids):
-                    logger.warning(
-                        "'%s' contains dicts without a '%s' field.",
-                        self.bulk_metadata_file,
-                        MARKET_ID,
-                    )
-                    market_ids = [x for x in market_ids if x is not None]
-                # Check there are no duplicates
-                market_id_counts = Counter(market_ids)
-                duplicates = [
-                    market_id
-                    for market_id, count in market_id_counts.items()
-                    if count > 1
-                ]
-                if duplicates:
-                    logger.warning("'%s' contains duplicate market IDs: %s", duplicates)
-
-                # Create a metadata lookup dict from valid data
-                for item in file_data:
-                    try:
-                        metadata_lookup[item[MARKET_ID]] = item
-                    except KeyError:
-                        pass
-                    except TypeError:
-                        pass
-
-                invalid_entries_count = len(file_data) - len(metadata_lookup)
-                if invalid_entries_count:
-                    logger.error(
-                        "'%s' contains %d invalid entries",
-                        self.bulk_metadata_file,
-                        invalid_entries_count,
-                    )
-
-                # Check if any market data files are missing
-                missing_data_files = set(metadata_lookup).difference(
-                    self._get_market_id(f) for f in self.data_files
-                )
-                if missing_data_files:
-                    logger.error(
-                        "'%s' contains an entry for market IDs %s, "
-                        "but matching market data files cannot be found in the directory.",
-                        self.bulk_metadata_file,
-                        sorted(missing_data_files),
-                    )
 
         return metadata_lookup
 
@@ -202,12 +138,6 @@ class DatabaseDirectory:
 
         return metadata_lookup
 
-    def _generate_bulk_metadata_file(self, metadata: list[dict]) -> Path:
-        """Generates a metadata.json file from the given data."""
-        self.bulk_metadata_file = file_path = self.path / METADATA_FILE_NAME
-        write_to_json(file_path, metadata)
-        return self.bulk_metadata_file
-
     def _clean_individual_metadata_files(self, create_backup: bool = True) -> None:
         """
         Removes individual metadata files, either by deleting or archiving them.
@@ -268,15 +198,21 @@ class DatabaseDirectory:
         if self.generate_metadata_file:
             if not merge_metadata and individual_file_market_ids:
                 # De-duplicate data written to metadata.json
-                metadata_to_write = [
-                    val
+                metadata_to_write = {
+                    key: val
                     for key, val in metadata_lookup.items()
                     if key not in individual_file_market_ids
-                ]
+                }
             else:
-                metadata_to_write = list(metadata_lookup.values())
-            bulk_metadata_file = self._generate_bulk_metadata_file(metadata_to_write)
-            logger.debug("Generated metadata file '%s'.", bulk_metadata_file)
+                metadata_to_write = metadata_lookup
+
+            if self.bulk_metadata_file is None:
+                self.bulk_metadata_file = BulkMetadataFile(
+                    self.path / METADATA_FILE_NAME, False
+                )
+
+            self.bulk_metadata_file.write_metadata(metadata_to_write)
+            logger.debug("Generated metadata file '%s'.", self.bulk_metadata_file.path)
 
         # Clean up individual metadata files (archive and/or delete)
         if merge_metadata:
@@ -287,7 +223,7 @@ class DatabaseDirectory:
             # All metadata comes from a single metadata.json file
             return [
                 Market(
-                    self.bulk_metadata_file,
+                    self.bulk_metadata_file.path,
                     data_file,
                     metadata_lookup[self._get_market_id(data_file)],
                 )
@@ -304,7 +240,11 @@ class DatabaseDirectory:
                 Market(
                     metadata_file_lookup.get(
                         market_id,
-                        self.bulk_metadata_file,
+                        (
+                            self.bulk_metadata_file.path
+                            if self.bulk_metadata_file
+                            else None
+                        ),
                     ),
                     data_file,
                     market_metadata,

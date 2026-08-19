@@ -511,8 +511,8 @@ class TestBulkMetadataFile(TestLoggingBase):
 
         # Check error messages
         error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
-        self.assertEqual(len(error_messages), 1)
-        message = error_messages[0]
+        self.assertEqual(len(error_messages), 3)
+        message = error_messages[2]
         self.assertIn(f"contains 3 invalid entries", message)
         self.assertIn(METADATA_FILE_NAME, message)
 

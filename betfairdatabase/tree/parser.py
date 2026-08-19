@@ -7,6 +7,7 @@ from betfairdatabase.const import (
     METADATA_FILE_NAME,
 )
 from betfairdatabase.tree.dir import DatabaseDirectory
+from betfairdatabase.tree.metadatafile import BulkMetadataFile
 from betfairdatabase.utils import (
     ProgressBarMixin,
 )
@@ -64,7 +65,11 @@ class DirectoryParser(ProgressBarMixin):
                 dnm,
                 dfs,
                 individual_metadata_files.get(dnm, []),
-                bulk_metadata_files.get(dnm),
+                (
+                    BulkMetadataFile(bmf)
+                    if (bmf := bulk_metadata_files.get(dnm))
+                    else None
+                ),
             )
             for dnm, dfs in data_files.items()
         ]

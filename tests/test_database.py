@@ -455,7 +455,7 @@ class TestBulkMetadataFile(TestLoggingBase):
         self.assertEqual(len(data), 4)
         self.assertEqual(
             {x[MARKET_ID] for x in data},
-            {"1.209492554", "1.209492555", "1.209492556", "1.209492557"},
+            {"1.209492555", "1.209492556", "1.209492557", "1.209492558"},
         )
 
     def test_file_decode_error(self):

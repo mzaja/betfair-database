@@ -33,6 +33,17 @@ def write_to_json(file: Path, contents: Any) -> int:
     )
 
 
+def create_backup(file: Path, extension: str = ".bak") -> Path:
+    """
+    Creates a backup of a file by appending the chosen extension to it.
+    The file is moved, not copied.
+    The destination file is overwritten if it already exists.
+    Returns the path to the backup file.
+    """
+    backup_file_name = file.with_suffix(file.suffix + extension)
+    return file.replace(backup_file_name)
+
+
 def parse_datetime(datetime_str: str) -> dt.datetime:
     """
     Parses Betfair's ISO 8601 datetime format.

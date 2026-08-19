@@ -58,13 +58,17 @@ class TestBetfairDatabase(TestLoggingBase):
             error_messages = sorted(
                 r.message for r in logs.records if r.levelno == logging.ERROR
             )
-            self.assertEqual(len(error_messages), 2)
+            self.assertEqual(len(error_messages), 3)
             # Corrupt file's name was logged
             message = error_messages[0]
             self.assertIn("Error parsing", message)
             self.assertIn(corrupt_market_id + ".json", message)
+            # There was a second attempt to parse the zip file (also corrupt)
+            message = error_messages[1]
+            self.assertIn("Error parsing", message)
+            self.assertIn(corrupt_market_id + ".zip", message)
             # Missing market data file event was logged
-            message = message = error_messages[1]
+            message = message = error_messages[2]
             self.assertIn("Missing market data file", message)
             self.assertIn(missing_data_file_market_id + ".json", message)
 

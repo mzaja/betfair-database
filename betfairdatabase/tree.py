@@ -3,8 +3,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Iterable
-from zipfile import ZIP_DEFLATED, ZipFile
+from typing import Iterable, Literal
+from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
 from betfairdatabase.const import (
     DATA_FILE_SUFFIXES,
@@ -33,6 +33,53 @@ logger = logging.getLogger(__name__)
 # CLASSES
 # ---------------------------------------------------------------------------
 @dataclass(slots=True)
+class Counters:
+    """
+    Stores counters for various operations of the market file processor.
+    Used to display import statistics.
+    """
+
+    total_markets: int = 0
+    markets_without_data: int = 0
+    markets_without_metadata: int = 0
+    corrupt_files: int = 0
+    rows_inserted: int = 0
+    markets_updated: int = 0
+    markets_skipped: int = 0
+
+    @property
+    def markets_added(self) -> int:
+        """Returns the number of added markets."""
+        return self.rows_inserted - self.markets_updated
+
+    def log_info(self, action: Literal["indexing", "importing"]) -> None:
+        """Logs the counters as INFO messages."""
+        logger.info("Finished %s %d markets.", action, self.total_markets)
+        logger.info("Added: %d", self.markets_added)
+        if action == "importing":
+            logger.info("Updated: %d", self.markets_updated)
+            logger.info("Skipped: %d", self.markets_skipped)
+        logger.info("Corrupt: %d", self.corrupt_files)
+        logger.info("No data: %d", self.markets_without_data)
+        logger.info("No metadata: %d", self.markets_without_metadata)
+        if not self.validate():
+            logger.error("Counters do not add up.")
+
+    def validate(self) -> bool:
+        """
+        Performs a sanity check on the contents to ensure that the sum of components
+        matches the total. Returns True if the checks passes, else False.
+        """
+        return self.total_markets == (
+            self.rows_inserted
+            + self.markets_skipped
+            + self.corrupt_files
+            + self.markets_without_data
+            + self.markets_without_metadata
+        )
+
+
+@dataclass(slots=True)
 class DatabaseDirectory:
     """Models a directory in the database containing files of interest."""
 
@@ -40,20 +87,8 @@ class DatabaseDirectory:
     data_files: list[Path] = field(default_factory=list)
     individual_metadata_files: list[Path] = field(default_factory=list)
     bulk_metadata_file: Path | None = None
-
-    def __bool__(self) -> bool:
-        """Returns True if the directory contains any files of interest, else False."""
-        return bool(
-            self.data_files or self.individual_metadata_files or self.bulk_metadata_file
-        )
-
-    def __len__(self) -> int:
-        """Returns the number of files of interest in the directory."""
-        return (
-            len(self.data_files)
-            + len(self.individual_metadata_files)
-            + bool(self.bulk_metadata_file)  # bool is implicitly int
-        )
+    generate_metadata_file: bool = field(default=False, init=False)
+    corrupt_markets: set = field(default_factory=set, init=False)
 
     @staticmethod
     def _parse_json_and_log_error(file: Path) -> dict | list | None:
@@ -67,23 +102,23 @@ class DatabaseDirectory:
             logger.error("Error parsing '%s'.", file)
         return None  # Invalid data
 
-    def _parse_bulk_metadata_file(self) -> list[dict]:
+    def _parse_bulk_metadata_file(self) -> dict[str, dict]:
         """
         Parses a `metadata.json` file.
         If the file cannot be parsed or does not contain valid data types,
         it will be renamed to `metadata.json.bak`.
         """
-        data = []
+        metadata_lookup = {}
         if self.bulk_metadata_file:
-            data = self._parse_json_and_log_error(self.bulk_metadata_file)
-            if not isinstance(data, list):
+            file_data = self._parse_json_and_log_error(self.bulk_metadata_file)
+            if not isinstance(file_data, list):
                 # Data is not valid and cannot be updated
-                if data is not None:
+                if file_data is not None:
                     # File could be parsed, but the expected data type is wrong
                     logger.error(
                         "'%s' should be a list of dicts, not a %s.",
                         self.bulk_metadata_file,
-                        data.__class__.__name__,
+                        file_data.__class__.__name__,
                     )
                 # Backup this file because it will get overwritten otherwise
                 # and some data might get lost
@@ -93,17 +128,19 @@ class DatabaseDirectory:
                     self.bulk_metadata_file,
                     backup_file,
                 )
-                self.bulk_metadata_file = (
-                    None  # Update state, just in case another call is made
-                )
-            elif data:
-                # It's a non-empty list -> validate and warn of violations
-                if not all(isinstance(elem, dict) for elem in data):
+                # Update state, just in case another call is made
+                self.bulk_metadata_file = None
+            elif file_data:  # It's a non-empty list -> validate and warn of violations
+                market_ids = [
+                    elem.get(MARKET_ID) for elem in file_data if isinstance(elem, dict)
+                ]
+                # Checks all elements are dicts
+                if len(market_ids) < len(file_data):
                     logger.warning(
                         "'%s' contains list elements which are not dicts.",
                         self.bulk_metadata_file,
                     )
-                market_ids = [elem.get(MARKET_ID) for elem in data]
+                # Check all elements contain a market ID field
                 if not all(market_ids):
                     logger.warning(
                         "'%s' contains dicts without a '%s' field.",
@@ -111,69 +148,121 @@ class DatabaseDirectory:
                         MARKET_ID,
                     )
                     market_ids = [x for x in market_ids if x is not None]
+                # Check there are no duplicates
                 market_id_counts = Counter(market_ids)
                 duplicates = [
                     market_id
-                    for market_id, count in market_id_counts.values()
+                    for market_id, count in market_id_counts.items()
                     if count > 1
                 ]
                 if duplicates:
                     logger.warning("'%s' contains duplicate market IDs: %s", duplicates)
-        return data
 
-    @classmethod
+                # Create a metadata lookup dict from valid data
+                for item in file_data:
+                    try:
+                        metadata_lookup[item[MARKET_ID]] = item
+                    except KeyError:
+                        pass
+                    except TypeError:
+                        pass
+
+                invalid_entries_count = len(file_data) - len(metadata_lookup)
+                if invalid_entries_count:
+                    logger.error(
+                        "'%s' contains %d invalid entries",
+                        self.bulk_metadata_file,
+                        invalid_entries_count,
+                    )
+
+                # Check if any market data files are missing
+                missing_data_files = set(metadata_lookup).difference(
+                    self._get_market_id(f) for f in self.data_files
+                )
+                if missing_data_files:
+                    logger.error(
+                        "'%s' contains an entry for market IDs %s, "
+                        "but matching market data files cannot be found in the directory.",
+                        self.bulk_metadata_file,
+                        sorted(missing_data_files),
+                    )
+
+        return metadata_lookup
+
     def _parse_individual_metadata_files(
-        cls, files_to_process: Iterable[Path]
-    ) -> list[dict]:
+        self, files_to_process: Iterable[Path]
+    ) -> dict[str, dict]:
         """
         Parses individual `1.*.json` files containing market catalogues or market definitions.
         """
-        return [
-            data
+        files_to_process = list(files_to_process)
+        metadata_lookup = {
+            data[MARKET_ID]: data
             for file in files_to_process
-            if (data := cls._parse_json_and_log_error(file))
-        ]
+            if (data := self._parse_json_and_log_error(file))
+        }
+        self.corrupt_markets |= set(f.stem for f in files_to_process).difference(
+            metadata_lookup
+        )
+        return metadata_lookup
 
-    @staticmethod
-    def _parse_market_definitions(files_to_process: Iterable[Path]) -> list[dict]:
+    def _parse_market_definitions(
+        self, files_to_process: Iterable[Path], counters: Counters
+    ) -> dict[str, dict]:
         """Parses market definitions from market data files."""
-        data = []
+        metadata_lookup = {}
         for file in files_to_process:
             try:
-                data.append(MarketDefinitionProcessor.parse_market_definition(file))
+                market_def = MarketDefinitionProcessor.parse_market_definition(file)
+                metadata_lookup[market_def[MARKET_ID]] = market_def
             except MarketDefinitionMissingError:
-                logger.warning("Market definition missing in '%s'.", file)
-        return data
+                logger.error("Market definition missing in '%s'.", file)
+                counters.markets_without_metadata += 1
+            except (JSONDecodeError, BadZipFile):
+                logger.error("Error parsing '%s'.", file)
+                self.corrupt_markets.add(self._get_market_id(file))
+        return metadata_lookup
 
-    def parse_metadata(self) -> list[dict]:
+    def _parse_metadata(
+        self, counters: Counters, individual_file_market_ids: set
+    ) -> dict[str, dict]:
         """
         Parses the directory metadata. Starts with `metadata.json`, moves to individual
         metadata files (`<market_id>.json`) and finishes by extracting market definitions
         from data files if metadata was not extracted sooner.
         """
-        bulk_metadata = self._parse_bulk_metadata_file()
-        parsed_market_ids = set(m.get(MARKET_ID) for m in bulk_metadata)
+        metadata_lookup = self._parse_bulk_metadata_file()
 
         files_to_process = (
-            f for f in self.individual_metadata_files if f.stem not in parsed_market_ids
+            f for f in self.individual_metadata_files if f.stem not in metadata_lookup
         )
         individual_metadata = self._parse_individual_metadata_files(files_to_process)
-        parsed_market_ids |= set(m.get(MARKET_ID) for m in individual_metadata)
+        metadata_lookup |= individual_metadata
+        individual_file_market_ids |= set(individual_metadata)
 
         files_to_process = (
-            f for f in self.data_files if parsed_market_ids.isdisjoint({f.stem, f.name})
+            f for f in self.data_files if self._get_market_id(f) not in metadata_lookup
         )
-        market_defs = self._parse_market_definitions(files_to_process)
-        return bulk_metadata + individual_metadata + market_defs
+        market_defs = self._parse_market_definitions(files_to_process, counters)
+        if market_defs:
+            self.generate_metadata_file = True
+            metadata_lookup |= market_defs
 
-    def generate_bulk_metadata_file(
-        self, backup_individual_metadata_files: bool = True
-    ) -> tuple[list[dict], Path]:
+        return metadata_lookup
+
+    def _generate_bulk_metadata_file(self, metadata: list[dict]) -> Path:
+        """Generates a metadata.json file from the given data."""
+        self.bulk_metadata_file = file_path = self.path / METADATA_FILE_NAME
+        write_to_json(file_path, metadata)
+        return self.bulk_metadata_file
+
+    def _clean_individual_metadata_files(self, create_backup: bool = True) -> None:
         """
-        Generates one `metadata.json` file to rule them all.
+        Removes individual metadata files, either by deleting or archiving them.
+        The end result is zero `<market_id>.json` files on disk.
         """
-        # Backkup individual market metadata files if required
-        if backup_individual_metadata_files and self.individual_metadata_files:
+        # Backup individual market metadata files if required
+        if create_backup and self.individual_metadata_files:
             archive_path = self.path / "metadata_src.zip"
             with ZipFile(archive_path, "w", ZIP_DEFLATED) as zf:
                 for file in self.individual_metadata_files:
@@ -183,40 +272,98 @@ class DatabaseDirectory:
                 len(self.individual_metadata_files),
                 archive_path,
             )
-
-        # Parse and merge metadata from all sources
-        metadata = self.parse_metadata()
-
-        # Write merged metadata to a metadata.json file
-        self.bulk_metadata_file = file_path = self.path / METADATA_FILE_NAME
-        write_to_json(file_path, metadata)
-
         # Remove individual metadata files which are not needed anymore
         for file in self.individual_metadata_files:
             file.unlink()
         self.individual_metadata_files = []
 
-        return metadata, file_path
+    @staticmethod
+    def _get_market_id(file: Path) -> str:
+        """Extracts the market ID from the file path."""
+        if len(file.suffix) > 8:
+            return file.name
+        else:
+            return file.stem
 
     def process(
-        self, merge_metadata: bool = True, backup_individual_metadata_files: bool = True
+        self,
+        counters: Counters,
+        merge_metadata: bool = False,
+        backup_individual_metadata_files: bool = True,
     ) -> list[Market]:
         """Process a directory."""
-        raise NotImplementedError
-        if merge_metadata:
-            metadata, metadata_file = self.generate_bulk_metadata_file(
-                backup_individual_metadata_files
+        # Parse metadata
+        individual_file_market_ids = set()  # Required for legacy mode only
+        metadata_lookup = self._parse_metadata(counters, individual_file_market_ids)
+
+        # Update counters
+        data_file_market_ids = set(self._get_market_id(f) for f in self.data_files)
+        metadata_file_market_ids = set(f.stem for f in self.individual_metadata_files)
+        counters.total_markets += len(data_file_market_ids | metadata_file_market_ids)
+        markets_without_data = metadata_file_market_ids.difference(data_file_market_ids)
+        counters.markets_without_data += len(markets_without_data)
+        if markets_without_data:
+            logger.error(
+                "Missing market data file for metadata files: %s",
+                [
+                    str(self.path / f"{market_id}.json")
+                    for market_id in sorted(markets_without_data)
+                ],
             )
-            # Check that all data files have been covered, but not more than that
+        counters.corrupt_files += len(self.corrupt_markets)
+
+        # Generate metadata.json file
+        if self.generate_metadata_file:
+            if not merge_metadata and individual_file_market_ids:
+                # De-duplicate data written to metadata.json
+                metadata_to_write = [
+                    val
+                    for key, val in metadata_lookup.items()
+                    if key not in individual_file_market_ids
+                ]
+            else:
+                metadata_to_write = list(metadata_lookup.values())
+            bulk_metadata_file = self._generate_bulk_metadata_file(metadata_to_write)
+            logger.debug("Generated metadata file '%s'.", bulk_metadata_file)
+
+        # Clean up individual metadata files (archive and/or delete)
+        if merge_metadata:
+            self._clean_individual_metadata_files(backup_individual_metadata_files)
+
+        # Generate importable markets
+        if merge_metadata:
+            # All metadata comes from a single metadata.json file
             return [
                 Market(
-                    metadata_file, mdf, metadata.get(mdf.stem, metadata.get(mdf.name))
+                    self.bulk_metadata_file,
+                    data_file,
+                    metadata_lookup[self._get_market_id(data_file)],
                 )
-                for mdf in self.data_files
+                for data_file in self.data_files
             ]
         else:
-            metadata = self.parse_metadata()
-            return [Market()]
+            # Legacy/mixed mode -> Metadata partially/fully comes from individual metadata files
+            metadata_file_lookup = {
+                market_id: file
+                for file in self.individual_metadata_files
+                if (market_id := file.stem) in individual_file_market_ids
+            }
+            return [
+                Market(
+                    metadata_file_lookup.get(
+                        market_id,
+                        self.bulk_metadata_file,
+                    ),
+                    data_file,
+                    market_metadata,
+                )
+                for data_file in self.data_files
+                if (
+                    market_metadata := metadata_lookup.get(
+                        (market_id := self._get_market_id(data_file))
+                    )
+                )
+            ]
 
 
 class DirectoryParser(ProgressBarMixin):
@@ -235,7 +382,7 @@ class DirectoryParser(ProgressBarMixin):
         # pathlib.Path.rglob does not support brace expansion to look for multiple
         # patterns at once. Therefore, all files need to be located and filtered
         # manually to avoid traversing the whole directory tree more than once.
-        for file in self._progress_bar(root_dir.rglob("*")), "Locating markets":
+        for file in self._progress_bar(root_dir.rglob("*"), "Locating markets"):
             file_name = file.name
             if file_name.startswith("1."):
                 file_suffix = file.suffix
@@ -251,7 +398,9 @@ class DirectoryParser(ProgressBarMixin):
             elif file_name == METADATA_FILE_NAME:
                 bulk_metadata_files[file.parent] = file
         metadata_without_data = (
-            set(individual_metadata_files) + set(bulk_metadata_files) - set(data_files)
+            set(individual_metadata_files)
+            .union(bulk_metadata_files)
+            .difference(data_files)
         )
         if metadata_without_data:
             logger.warning(

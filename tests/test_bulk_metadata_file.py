@@ -6,6 +6,7 @@ from betfairdatabase.const import MARKET_ID
 from betfairdatabase.tree.metadatafile import BulkMetadataFile
 from betfairdatabase.utils import read_json, write_to_json
 from tests.data.fixtures import TestFixture
+from tests.utils import get_error_messages, get_warning_messages
 
 
 class BulkMetadataFileTests(unittest.TestCase):
@@ -42,7 +43,7 @@ class BulkMetadataFileTests(unittest.TestCase):
 
         self.assert_backup_file_exists(file.path)
 
-        error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
+        error_messages = get_error_messages(logs)
         self.assertEqual(len(error_messages), 1)
         self.assertRegex(error_messages[0], f"Error parsing.*{file.path.name}")
 
@@ -55,7 +56,7 @@ class BulkMetadataFileTests(unittest.TestCase):
             self.assertEqual(file.parse_and_validate(), {})
             file.write({"1.123": {MARKET_ID: "1.123"}})  # Passes if no error is raised
 
-        error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
+        error_messages = get_error_messages(logs)
         self.assertEqual(len(error_messages), 1)
         self.assertRegex(error_messages[0], f"{file_name}.* does not exist")
 
@@ -69,7 +70,7 @@ class BulkMetadataFileTests(unittest.TestCase):
 
         self.assert_backup_file_exists(file.path)
 
-        error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
+        error_messages = get_error_messages(logs)
         self.assertEqual(len(error_messages), 1)
         self.assertRegex(
             error_messages[0], f"{file.path.name}.*should be a list of dicts"
@@ -96,7 +97,7 @@ class BulkMetadataFileTests(unittest.TestCase):
         self.assertEqual(set(metadata_lookup.keys()), {"1.123", "1.456", "1.789"})
         self.assert_backup_file_exists(file.path)
 
-        error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
+        error_messages = get_error_messages(logs)
         self.assertEqual(len(error_messages), 2)
         self.assertRegex(
             error_messages[0],
@@ -126,7 +127,7 @@ class BulkMetadataFileTests(unittest.TestCase):
         self.assertEqual(set(metadata_lookup.keys()), {"1.123", "1.456", "1.789"})
         self.assert_backup_file_exists(file.path)
 
-        error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
+        error_messages = get_error_messages(logs)
         self.assertEqual(len(error_messages), 2)
         self.assertRegex(
             error_messages[0],
@@ -156,9 +157,7 @@ class BulkMetadataFileTests(unittest.TestCase):
         self.assertEqual(set(metadata_lookup.keys()), {"1.123", "1.456", "1.789"})
         self.assert_backup_file_exists(file.path)
 
-        warning_messages = [
-            r.message for r in logs.records if r.levelno == logging.WARNING
-        ]
+        warning_messages = get_warning_messages(logs)
         self.assertEqual(len(warning_messages), 2)
         msg = warning_messages[0]
         self.assertRegex(msg, f"contains duplicate market IDs")

@@ -105,7 +105,9 @@ class BulkMetadataFile:
             ]
             if duplicates:
                 has_errors = True
-                logger.warning("'%s' contains duplicate market IDs: %s", duplicates)
+                logger.warning(
+                    "'%s' contains duplicate market IDs: %s", self.path, duplicates
+                )
 
             # Create a metadata lookup dict from valid data
             for item in contents:
@@ -130,7 +132,7 @@ class BulkMetadataFile:
 
         return metadata_lookup
 
-    def write_metadata(self, metadata_lookup: dict[str, dict]) -> None:
+    def write(self, metadata_lookup: dict[str, dict]) -> None:
         """Writes"""
         if self._exists is None:
             raise ValueError(
@@ -138,7 +140,11 @@ class BulkMetadataFile:
             )
 
         # Validate
-        if not all(v[MARKET_ID] == k for k, v in metadata_lookup.items()):
+        if not isinstance(metadata_lookup, dict):
+            raise ValueError("Metadata lookup must be a dict.")
+        elif not metadata_lookup:
+            raise ValueError("Metadata lookup is empty.")
+        elif not all(k == v[MARKET_ID] for k, v in metadata_lookup.items()):
             raise ValueError("Mismatched market IDs.")
 
         write_to_json(self.path, list(metadata_lookup.values()))

@@ -120,9 +120,9 @@ class TestRacing(unittest.TestCase):
         win_market = Market(WIN_MARKET_CATALOGUE, WIN_MARKET_DATA)
         place_market = Market(PLACE_MARKET_CATALOGUE, PLACE_MARKET_DATA)
         non_racing_market = Market(NON_RACING_MARKET_CATALOGUE, NON_RACING_MARKET_DATA)
-        proc = RacingDataProcessor()
-        for market in (win_market, place_market, non_racing_market):
-            proc.add(market)  # No exception should be raised
+        proc = RacingDataProcessor(
+            [win_market, place_market, non_racing_market], progress_bar_enabled=False
+        )
         metadata = proc.get(win_market)
         self.assertEqual(len(metadata), 4)  # Not empty
         self.assertEqual(proc.get(place_market), metadata)  # Markets are linked
@@ -142,7 +142,6 @@ class TestRacing(unittest.TestCase):
                 )
                 mock_market.metadata = metadata
                 mock_market.racing = True
-                proc = RacingDataProcessor()
                 # Test passes if no exceptions are raised
-                proc.add(mock_market)
+                proc = RacingDataProcessor([mock_market], progress_bar_enabled=False)
                 proc.get(mock_market)

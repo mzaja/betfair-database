@@ -21,7 +21,6 @@ from betfairdatabase.exceptions import (
 )
 from betfairdatabase.imports import ImportPatterns
 from betfairdatabase.processor import MarketFileProcessor
-from betfairdatabase.racing import RacingDataProcessor
 from betfairdatabase.utils import ProgressBarMixin, is_debug_logging_enabled
 
 # ---------------------------------------------------------------------------
@@ -50,7 +49,6 @@ class BetfairDatabase(ProgressBarMixin):
         if not self.database_dir.is_dir():
             raise DatabaseDirectoryError(f"'{database_dir}' is not a directory.")
         self._index_file = self.database_dir / INDEX_FILENAME
-        self._racing_data_processor = RacingDataProcessor()
 
     def index(self, force: bool = False) -> int:
         """

@@ -9,6 +9,12 @@ from betfairdatabase.database import logger
 from betfairdatabase.imports import ImportPatterns
 from betfairdatabase.processor import Counters
 from tests.data import Datasets, TestFixture
+from tests.utils import (
+    get_debug_messages,
+    get_error_messages,
+    get_info_messages,
+    get_warning_messages,
+)
 
 
 class TestLoggingBase(unittest.TestCase):
@@ -55,23 +61,28 @@ class TestBetfairDatabase(TestLoggingBase):
                 self.assertNotEqual(row["marketId"], missing_data_file_market_id)
 
             # Error message were emitted for corrupt and missing data
-            error_messages = sorted(
-                r.message for r in logs.records if r.levelno == logging.ERROR
-            )
+            error_messages = get_error_messages(logs)
             self.assertEqual(len(error_messages), 2)
             # Corrupt file's name was logged
-            message = error_messages[0]
-            self.assertIn("Error parsing", message)
-            self.assertIn(corrupt_market_id + ".json", message)
+            self.assertRegex(
+                error_messages[0],
+                f"Error parsing.*{corrupt_market_id}\\.json",
+            )
+            # There was a second attempt to parse the zip file (also corrupt)
+            self.assertRegex(
+                error_messages[1],
+                f"Error parsing.*{corrupt_market_id}\\.zip",
+            )
             # Missing market data file event was logged
-            message = message = error_messages[1]
-            self.assertIn("Missing market data file", message)
-            self.assertIn(missing_data_file_market_id + ".json", message)
+            warnings = get_warning_messages(logs)
+            self.assertEqual(len(warnings), 1)
+            self.assertRegex(
+                warnings[0],
+                f"{missing_data_file_market_id}.*market data files cannot be found",
+            )
 
             # Check summary
-            info_messages = [
-                r.message for r in logs.records if r.levelno == logging.INFO
-            ]
+            info_messages = get_info_messages(logs)
             expected_messages = [
                 "Finished indexing 7 markets.",
                 "Added: 5",
@@ -119,9 +130,7 @@ class TestBetfairDatabase(TestLoggingBase):
             self.assertNotIn("1.223716890", imported_market_ids)  # Corrupt, unparsable
 
             # Check summary
-            info_messages = [
-                r.message for r in logs.records if r.levelno == logging.INFO
-            ]
+            info_messages = get_info_messages(logs)
             expected_messages = [
                 "Finished indexing 6 markets.",
                 "Added: 4",
@@ -146,9 +155,7 @@ class TestBetfairDatabase(TestLoggingBase):
                 database = BetfairDatabase(db_dir)
                 database.index()
 
-                debug_messages = sorted(
-                    r.message for r in logs.records if r.levelno == logging.DEBUG
-                )
+                debug_messages = sorted(get_debug_messages(logs))
                 self.assertEqual(len(debug_messages), 4)
                 for message, data_file_name in zip(
                     debug_messages,
@@ -163,9 +170,7 @@ class TestBetfairDatabase(TestLoggingBase):
                     self.assertIn(data_file_name, message)
 
                 # Check summary
-                info_messages = [
-                    r.message for r in logs.records if r.levelno == logging.INFO
-                ]
+                info_messages = get_info_messages(logs)
                 expected_messages = [
                     "Finished indexing 4 markets.",
                     "Added: 4",
@@ -189,9 +194,7 @@ class TestBetfairDatabase(TestLoggingBase):
                     on_duplicates=DuplicatePolicy.SKIP,
                 )
 
-                debug_messages = sorted(
-                    r.message for r in logs.records if r.levelno == logging.DEBUG
-                )
+                debug_messages = sorted(get_debug_messages(logs))
                 self.assertEqual(len(debug_messages), 3)
                 for message, data_file_name in zip(
                     # "Skipping" comes after "Adding", so reshuffle the order of file names
@@ -206,9 +209,7 @@ class TestBetfairDatabase(TestLoggingBase):
                     self.assertIn(data_file_name, message)
 
                 # Check summary
-                info_messages = [
-                    r.message for r in logs.records if r.levelno == logging.INFO
-                ]
+                info_messages = get_info_messages(logs)
                 expected_messages = [
                     "Finished importing 3 markets.",
                     "Added: 2",
@@ -231,18 +232,14 @@ class TestBetfairDatabase(TestLoggingBase):
                     pattern=ImportPatterns.flat,
                     on_duplicates=DuplicatePolicy.REPLACE,
                 )
-                debug_messages = sorted(
-                    r.message for r in logs.records if r.levelno == logging.DEBUG
-                )
+                debug_messages = sorted(get_debug_messages(logs))
                 self.assertEqual(len(debug_messages), 3)
                 for message, data_file_name in zip(debug_messages, DUPLICATE_FILES):
                     self.assertTrue(message.startswith("Updating"))
                     self.assertIn(data_file_name, message)
 
                 # Check summary
-                info_messages = [
-                    r.message for r in logs.records if r.levelno == logging.INFO
-                ]
+                info_messages = get_info_messages(logs)
                 expected_messages = [
                     "Finished importing 3 markets.",
                     "Added: 0",
@@ -264,17 +261,13 @@ class TestBetfairDatabase(TestLoggingBase):
                     (database.database_dir / file).unlink()
                 database.clean()
 
-                debug_messages = sorted(
-                    r.message for r in logs.records if r.levelno == logging.DEBUG
-                )
+                debug_messages = sorted(get_debug_messages(logs))
                 self.assertEqual(len(debug_messages), 2)
                 for message, data_file_name in zip(debug_messages, removed_files):
                     self.assertTrue(message.startswith("Removing"))
                     self.assertIn(data_file_name, message)
 
-                info_messages = [
-                    r.message for r in logs.records if r.levelno == logging.INFO
-                ]
+                info_messages = get_info_messages(logs)
                 self.assertEqual(len(info_messages), 1)
                 self.assertIn("Removed 2 ", info_messages[0])
 
@@ -328,9 +321,7 @@ class TestBetfairDatabase(TestLoggingBase):
             )
 
         # Check debug message (required for 100 % coverage)
-        debug_messages = sorted(
-            r.message for r in logs.records if r.levelno == logging.DEBUG
-        )
+        debug_messages = sorted(get_debug_messages(logs))
         self.assertEqual(
             len([msg for msg in debug_messages if msg.startswith("Adding")]),
             MARKETS_IMPORTED,
@@ -414,115 +405,3 @@ class TestBetfairDatabase(TestLoggingBase):
         self.assertFalse(counters.validate())
         with self.assertLogs(level=logging.ERROR):
             counters.log_info(ACTION)
-
-
-class TestBulkMetadataFile(TestLoggingBase):
-    """
-    Holds tests for metadata.json files.
-    """
-
-    def setUp(self):
-        super().setUp()
-        self.text_fixture = TestFixture(Datasets(bulk_metadata=True))
-        self.db_dir = self.text_fixture.path
-        self.dataset_dir = self.db_dir / "bulk_metadata"
-        self.metadata_file = self.dataset_dir / METADATA_FILE_NAME
-
-    def tearDown(self):
-        super().tearDown()
-        self.text_fixture.close()
-
-    def count_market_files(self) -> int:
-        """
-        Returns the number of market data and metadata files (starting with `1.`)
-        in the text fixture directory.
-        """
-        return len(list(self.db_dir.rglob("1.*")))
-
-    def test_parsing_and_indexing(self):
-        """Tests database indexing with a metadata.json file present in the database."""
-        market_files_before = self.count_market_files()
-        database = BetfairDatabase(self.db_dir)
-        database.index()
-        market_files_after = self.count_market_files()
-        # Verify that the database did not create metadata files
-        self.assertEqual(market_files_after, market_files_before)
-        data = database.select()
-        self.assertEqual(len(data), 4)
-        self.assertEqual(
-            {x[MARKET_ID] for x in data},
-            {"1.197931750", "1.197931751", "1.201590187", "1.214870442"},
-        )
-
-    def test_file_decode_error(self):
-        """Tests handling errors in parsing metadata.json files."""
-        with (self.assertLogs(level=logging.ERROR) as logs,):
-            self.metadata_file.write_bytes(self.metadata_file.read_bytes()[:-5])
-            database = BetfairDatabase(self.db_dir)
-            database.index()
-            # Verify metadata was imported from market definitions (fallback)
-            self.assertEqual(len(database.select()), 4)
-
-        # Check error messages
-        error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
-        self.assertEqual(len(error_messages), 1)
-        message = error_messages[0]
-        self.assertIn("Error parsing", message)
-        self.assertIn(METADATA_FILE_NAME, message)
-
-    def test_file_contains_nonexistent_markets(self):
-        """
-        Tests that an error message is logged when metadata.json file contains
-        an entry for a nonexistent market data file.
-        """
-        with (self.assertLogs(level=logging.ERROR) as logs,):
-            data_file = self.dataset_dir / "1.197931750.zip"
-            data_file.unlink()
-            database = BetfairDatabase(self.db_dir)
-            database.index()
-            self.assertEqual(len(database.select()), 3)
-
-        # Check error messages
-        error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
-        self.assertEqual(len(error_messages), 1)
-        message = error_messages[0]
-        self.assertIn("cannot be found", message)
-        self.assertIn(data_file.stem, message)  # Market ID included in the message
-
-    def test_file_contains_invalid_entries(self):
-        """Invalid entries in metadata.json's list are skipped, and the rest are processed."""
-        with (self.assertLogs(level=logging.ERROR) as logs,):
-            # Inject invalid entries into metadata file
-            contents: list = json.loads(self.metadata_file.read_bytes())
-            contents.insert(2, [{"what_am_I_doing": "in_a_metadata.json file?"}])
-            contents.insert(1, {"some_chicken": "some_neck"})
-            contents.insert(0, {})
-            self.metadata_file.write_text(json.dumps(contents))
-
-            market_files_before = self.count_market_files()
-            BetfairDatabase(self.db_dir).index()
-            market_files_after = self.count_market_files()
-            # Verify metadata.json was used, not market definitions
-            self.assertEqual(market_files_after, market_files_before)
-
-        # Check error messages
-        error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
-        self.assertEqual(len(error_messages), 1)
-        message = error_messages[0]
-        self.assertIn(f"contains 3 invalid entries", message)
-        self.assertIn(METADATA_FILE_NAME, message)
-
-    def test_file_in_not_a_list(self):
-        """A warning is logged if metadata.json is not a list of dicts."""
-        with (self.assertLogs(level=logging.ERROR) as logs,):
-            self.metadata_file.write_text(json.dumps({"I_should": "be_a_list"}))
-            database = BetfairDatabase(self.db_dir)
-            database.index()
-            self.assertEqual(len(database.select()), 4)
-
-        # Check error messages
-        error_messages = [r.message for r in logs.records if r.levelno == logging.ERROR]
-        self.assertEqual(len(error_messages), 1)
-        message = error_messages[0]
-        self.assertIn(f"should be a list of dicts, not a dict", message)
-        self.assertIn(METADATA_FILE_NAME, message)

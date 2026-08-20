@@ -1,6 +1,8 @@
 import re
+from typing import Iterable
 
 from betfairdatabase.market import Market, MarketCatalogueData, MarketDefinitionData
+from betfairdatabase.utils import ProgressBarMixin
 
 # ---------------------------------------------------------------------------
 # CONST
@@ -75,13 +77,16 @@ def extract_race_metadata(market_name: str) -> dict:
 # ---------------------------------------------------------------------------
 # CLASSES
 # ---------------------------------------------------------------------------
-class RacingDataProcessor:
+class RacingDataProcessor(ProgressBarMixin):
     """
     Obtains and retrieves additional metadata for racing markets.
     """
 
-    def __init__(self):
+    def __init__(self, markets: Iterable[Market], progress_bar_enabled: bool):
+        super().__init__(progress_bar_enabled)
         self._race_metadata_lookup = {}
+        for market in self._progress_bar(markets, "Processing racing markets"):
+            self.add(market)
 
     @staticmethod
     def make_race_id(

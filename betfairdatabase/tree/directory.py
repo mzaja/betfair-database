@@ -38,20 +38,15 @@ class DatabaseDirectory:
     data_files: list[Path] = field(default_factory=list)
     individual_metadata_files: list[Path] = field(default_factory=list)
     bulk_metadata_file: BulkMetadataFile | None = None
-    generate_metadata_file: bool = field(default=False, init=False)
-    corrupt_markets: set = field(default_factory=set, init=False)
+    _generate_metadata_file: bool = field(default=False, init=False)
+    # For metrics only
+    _corrupt_markets: set[str] = field(default_factory=set, init=False)
+    _markets_without_metadata_count: int = field(default=0, init=False)
 
     @staticmethod
-    def _parse_json_and_log_error(file: Path) -> dict | list | None:
-        try:
-            data = read_json(file)
-            if isinstance(data, (dict, list)):
-                return data
-            else:
-                logger.error("'%s' does not contain valid market metadata.", file)
-        except JSONDecodeError:
-            logger.error("Error parsing '%s'.", file)
-        return None  # Invalid data
+    def _get_market_id(file: Path) -> str:
+        """Extracts the market ID from the file path."""
+        return file.name if (len(file.suffix) > 8) else file.stem
 
     def _parse_bulk_metadata_file(self) -> dict[str, dict]:
         """
@@ -59,23 +54,11 @@ class DatabaseDirectory:
         If the file cannot be parsed or does not contain valid data types,
         it will be renamed to `metadata.json.bak`.
         """
-        metadata_lookup = {}
-        if self.bulk_metadata_file:
-            metadata_lookup = self.bulk_metadata_file.parse_and_validate()
-
-            # Check if any market data files are missing
-            missing_data_files = set(metadata_lookup).difference(
-                self._get_market_id(f) for f in self.data_files
-            )
-            if missing_data_files:
-                logger.error(
-                    "'%s' contains an entry for market IDs %s, "
-                    "but matching market data files cannot be found in the directory.",
-                    self.bulk_metadata_file.path,
-                    sorted(missing_data_files),
-                )
-
-        return metadata_lookup
+        return (
+            self.bulk_metadata_file.parse_and_validate()
+            if self.bulk_metadata_file
+            else {}
+        )
 
     def _parse_individual_metadata_files(
         self, files_to_process: Iterable[Path]
@@ -83,44 +66,68 @@ class DatabaseDirectory:
         """
         Parses individual `1.*.json` files containing market catalogues or market definitions.
         """
-        files_to_process = list(files_to_process)
-        metadata_lookup = {
-            data[MARKET_ID]: data
-            for file in files_to_process
-            if (data := self._parse_json_and_log_error(file))
-        }
-        self.corrupt_markets |= set(f.stem for f in files_to_process).difference(
-            metadata_lookup
-        )
+        metadata_lookup = {}
+        for file in files_to_process:
+            try:
+                data = read_json(file)
+            except JSONDecodeError:
+                logger.error("Error parsing '%s'.", file)
+                self._corrupt_markets.add(file.stem)
+                continue
+
+            if not isinstance(data, dict) or (market_id := data.get(MARKET_ID)) is None:
+                logger.error("'%s' does not contain valid market metadata.", file)
+                self._corrupt_markets.add(file.stem)
+            else:
+                metadata_lookup[market_id] = data
         return metadata_lookup
 
     def _parse_market_definitions(
-        self, files_to_process: Iterable[Path], counters: Counters
+        self, files_to_process: Iterable[Path]
     ) -> dict[str, dict]:
         """Parses market definitions from market data files."""
         metadata_lookup = {}
+        self._markets_without_metadata_count = 0  # Reset counter
         for file in files_to_process:
             try:
                 market_def = MarketDefinitionProcessor.parse_market_definition(file)
                 metadata_lookup[market_def[MARKET_ID]] = market_def
             except MarketDefinitionMissingError:
                 logger.error("Market definition missing in '%s'.", file)
-                counters.markets_without_metadata += 1
+                self._markets_without_metadata_count += 1
             except (JSONDecodeError, BadZipFile):
                 logger.error("Error parsing '%s'.", file)
-                self.corrupt_markets.add(self._get_market_id(file))
+                self._corrupt_markets.add(self._get_market_id(file))
         return metadata_lookup
 
-    def _parse_metadata(
-        self, counters: Counters, individual_file_market_ids: set
-    ) -> dict[str, dict]:
+    def _check_for_missing_data_files(self, metadata_lookup: dict[str, dict]) -> None:
+        """Checks whether any data files are missing compared to the parsed metadata."""
+        missing_data_files = set(metadata_lookup).difference(
+            self._get_market_id(f) for f in self.data_files
+        )
+        if missing_data_files:
+            logger.warning(
+                "'%s' contains metadata for market IDs %s, "
+                "but the matching market data files cannot be found in the directory.",
+                self.path,
+                sorted(missing_data_files),
+            )
+
+    def _parse_metadata(self, individual_file_market_ids: set) -> dict[str, dict]:
         """
         Parses the directory metadata. Starts with `metadata.json`, moves to individual
         metadata files (`<market_id>.json`) and finishes by extracting market definitions
         from data files if metadata was not extracted sooner.
+
+        `individual_file_market_ids` is an output parameter, used for differentiating between
+        market metadata obtained from metadata.json and from individual metadata files. It is
+        only used when running in legacy mode, when `metadata.json` is not generated from the
+        existing market metadata files.
         """
+        # Parse metadata.json
         metadata_lookup = self._parse_bulk_metadata_file()
 
+        # Parse individual metadata files
         files_to_process = (
             f for f in self.individual_metadata_files if f.stem not in metadata_lookup
         )
@@ -128,12 +135,17 @@ class DatabaseDirectory:
         metadata_lookup |= individual_metadata
         individual_file_market_ids |= set(individual_metadata)
 
+        # Check whether any expected data files are missing from the directory
+        # (From here onwards, only data files are processed, which obviously exist)
+        self._check_for_missing_data_files(metadata_lookup)
+
+        # Parse market definitions from data files (streams)
         files_to_process = (
             f for f in self.data_files if self._get_market_id(f) not in metadata_lookup
         )
-        market_defs = self._parse_market_definitions(files_to_process, counters)
+        market_defs = self._parse_market_definitions(files_to_process)
         if market_defs:
-            self.generate_metadata_file = True
+            self._generate_metadata_file = True
             metadata_lookup |= market_defs
 
         return metadata_lookup
@@ -159,14 +171,6 @@ class DatabaseDirectory:
             file.unlink()
         self.individual_metadata_files = []
 
-    @staticmethod
-    def _get_market_id(file: Path) -> str:
-        """Extracts the market ID from the file path."""
-        if len(file.suffix) > 8:
-            return file.name
-        else:
-            return file.stem
-
     def process(
         self,
         counters: Counters,
@@ -176,7 +180,7 @@ class DatabaseDirectory:
         """Process a directory."""
         # Parse metadata
         individual_file_market_ids = set()  # Required for legacy mode only
-        metadata_lookup = self._parse_metadata(counters, individual_file_market_ids)
+        metadata_lookup = self._parse_metadata(individual_file_market_ids)
 
         # Update counters
         data_file_market_ids = set(self._get_market_id(f) for f in self.data_files)
@@ -184,18 +188,11 @@ class DatabaseDirectory:
         counters.total_markets += len(data_file_market_ids | metadata_file_market_ids)
         markets_without_data = metadata_file_market_ids.difference(data_file_market_ids)
         counters.markets_without_data += len(markets_without_data)
-        if markets_without_data:
-            logger.error(
-                "Missing market data file for metadata files: %s",
-                [
-                    str(self.path / f"{market_id}.json")
-                    for market_id in sorted(markets_without_data)
-                ],
-            )
-        counters.corrupt_files += len(self.corrupt_markets)
+        counters.markets_without_metadata += self._markets_without_metadata_count
+        counters.corrupt_files += len(self._corrupt_markets)
 
         # Generate metadata.json file
-        if self.generate_metadata_file:
+        if self._generate_metadata_file or merge_metadata:
             if not merge_metadata and individual_file_market_ids:
                 # De-duplicate data written to metadata.json
                 metadata_to_write = {

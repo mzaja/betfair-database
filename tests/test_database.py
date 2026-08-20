@@ -13,6 +13,7 @@ from tests.utils import (
     get_debug_messages,
     get_error_messages,
     get_info_messages,
+    get_warning_messages,
 )
 
 
@@ -60,20 +61,25 @@ class TestBetfairDatabase(TestLoggingBase):
                 self.assertNotEqual(row["marketId"], missing_data_file_market_id)
 
             # Error message were emitted for corrupt and missing data
-            error_messages = sorted(get_error_messages(logs))
-            self.assertEqual(len(error_messages), 3)
+            error_messages = get_error_messages(logs)
+            self.assertEqual(len(error_messages), 2)
             # Corrupt file's name was logged
-            message = error_messages[0]
-            self.assertIn("Error parsing", message)
-            self.assertIn(corrupt_market_id + ".json", message)
+            self.assertRegex(
+                error_messages[0],
+                f"Error parsing.*{corrupt_market_id}\\.json",
+            )
             # There was a second attempt to parse the zip file (also corrupt)
-            message = error_messages[1]
-            self.assertIn("Error parsing", message)
-            self.assertIn(corrupt_market_id + ".zip", message)
+            self.assertRegex(
+                error_messages[1],
+                f"Error parsing.*{corrupt_market_id}\\.zip",
+            )
             # Missing market data file event was logged
-            message = message = error_messages[2]
-            self.assertIn("Missing market data file", message)
-            self.assertIn(missing_data_file_market_id + ".json", message)
+            warnings = get_warning_messages(logs)
+            self.assertEqual(len(warnings), 1)
+            self.assertRegex(
+                warnings[0],
+                f"{missing_data_file_market_id}.*market data files cannot be found",
+            )
 
             # Check summary
             info_messages = get_info_messages(logs)

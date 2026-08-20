@@ -6,7 +6,7 @@ from betfairdatabase.const import (
     DATA_FILE_SUFFIXES,
     METADATA_FILE_NAME,
 )
-from betfairdatabase.tree.dir import DatabaseDirectory
+from betfairdatabase.tree.directory import DatabaseDirectory
 from betfairdatabase.tree.metadatafile import BulkMetadataFile
 from betfairdatabase.utils import (
     ProgressBarMixin,
@@ -49,17 +49,6 @@ class DirectoryParser(ProgressBarMixin):
                     data_files[file.parent].append(file)
             elif file_name == METADATA_FILE_NAME:
                 bulk_metadata_files[file.parent] = file
-        metadata_without_data = (
-            set(individual_metadata_files)
-            .union(bulk_metadata_files)
-            .difference(data_files)
-        )
-        if metadata_without_data:
-            logger.warning(
-                "Found %d directories with metadata files but no data files: %s",
-                len(metadata_without_data),
-                sorted(metadata_without_data),
-            )
         return [
             DatabaseDirectory(
                 dnm,

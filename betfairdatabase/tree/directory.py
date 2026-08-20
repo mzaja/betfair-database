@@ -211,7 +211,7 @@ class DatabaseDirectory:
                     self.path / METADATA_FILE_NAME, False
                 )
 
-            self.bulk_metadata_file.write_metadata(metadata_to_write)
+            self.bulk_metadata_file.write(metadata_to_write)
             logger.debug("Generated metadata file '%s'.", self.bulk_metadata_file.path)
 
         # Clean up individual metadata files (archive and/or delete)

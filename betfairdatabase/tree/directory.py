@@ -175,7 +175,7 @@ class DatabaseDirectory:
         self,
         counters: Counters,
         merge_metadata: bool = False,
-        backup_individual_metadata_files: bool = True,
+        backup_metadata_src: bool = True,
     ) -> list[Market]:
         """Process a directory."""
         # Parse metadata
@@ -213,7 +213,7 @@ class DatabaseDirectory:
 
         # Clean up individual metadata files (archive and/or delete)
         if merge_metadata:
-            self._clean_individual_metadata_files(backup_individual_metadata_files)
+            self._clean_individual_metadata_files(backup_metadata_src)
 
         # Generate importable markets
         if merge_metadata:

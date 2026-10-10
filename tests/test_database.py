@@ -7,7 +7,7 @@ from betfairdatabase import BetfairDatabase
 from betfairdatabase.const import MARKET_ID, METADATA_FILE_NAME, DuplicatePolicy
 from betfairdatabase.database import logger
 from betfairdatabase.imports import ImportPatterns
-from betfairdatabase.processor import Counters
+from betfairdatabase.metrics import Counters
 from tests.data import Datasets, TestFixture
 from tests.utils import (
     get_debug_messages,

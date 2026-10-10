@@ -2,8 +2,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from betfairdatabase.const import ENCODING_UTF_8
 from betfairdatabase.market import Market
+from betfairdatabase.utils import ENCODING_UTF_8
 
 MOCK_METADATA_FILENAME = Path("1.22334455.json")
 MOCK_DATA_FILENAME = Path("1.22334455.zip")

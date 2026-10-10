@@ -1,10 +1,13 @@
 # Test data info
+Contains information on datasets used in tests.
+
+## bulk_metadata
+Contains four market data files. One of them has its metadata in an individual `<market_id>.json` file. The remaining three have their metadata inside a single `metadata.json` file.
 
 ## corrupt
 Contains an empty ZIP and an empty JSON file. Use to trigger file processing errors.
 
-## datasets
-### official
+## official
 Contains a mixture of BASIC and PRO Betfair historical market files.
 
 Only `1.214555872.bz2` (greyhounds) file is accompanied by a JSON market definition file. The other archives expect to have their metadata files generated.
@@ -17,10 +20,10 @@ Only `1.214555872.bz2` (greyhounds) file is accompanied by a JSON market definit
 | 1.223716976.bz2 | Tennis     | BASIC |
 | 1.230478683.bz2 | Golf       | BASIC |
 
-### uncompressed
+## uncompressed
 Contains a selection of self-recorded market stream files accompanied by market catalogues. `1.199967351.json` is a lone market catalogue file without an accompanying data file.
 
-### zip-lzma
+## zip-lzma
 Contains a selection of self-recorded market stream files, compressed using ZIP-LZMA algorithm. Each ZIP file is acoompanied by a market catalogue file in JSON format.
 
 ## duplicates
@@ -38,7 +41,7 @@ Contains a mixture of self-recorded and official Betfair historical market strea
 |-----------------|----------|------------|-------|
 | 1.197931750.gz  | Recorded | Greyhounds | 10    |
 | 1.209492553     | Recorded | ???        | 18    |
-| 1.214555872.bz2 | Official | Greyhounds | 53    |
+| 1.210694127.bz2 | Official | Greyhounds | 22    |
 | 1.219107753.zip | Recorded | Greyhounds | 29    |
 | 1.223716890     | Official | Tennis     |  1    |
 | 1.223716981     | Official | Tennis     | 19    |

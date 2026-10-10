@@ -3,8 +3,6 @@ from enum import Enum
 # ---------------------------------------------------------------------------
 # CONSTANTS
 # ---------------------------------------------------------------------------
-# Generic
-ENCODING_UTF_8 = "utf-8"
 
 # SQL
 INDEX_FILENAME = ".betfairdatabaseindex"

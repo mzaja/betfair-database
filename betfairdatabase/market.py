@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from betfairdatabase.const import (
-    ENCODING_UTF_8,
     MARKET_DATA_FILE_PATH,
     MARKET_METADATA_FILE_PATH,
     SQL_TABLE_COLUMNS,
@@ -16,6 +15,7 @@ from betfairdatabase.const import (
     SQLAction,
 )
 from betfairdatabase.metadata import MarketCatalogueData, MarketDefinitionData
+from betfairdatabase.utils import read_json
 
 RACING_EVENT_TYPE_IDS = (
     "7",  # Horse racing
@@ -61,9 +61,7 @@ class Market:
     @cached_property
     def metadata(self) -> MarketCatalogueData | MarketDefinitionData:
         """Returns parsed market metadata, with the data source indicated by the return type."""
-        metadata = self._attached_metadata or json.loads(
-            self.market_metadata_file.read_text(encoding=ENCODING_UTF_8),
-        )
+        metadata = self._attached_metadata or read_json(self.market_metadata_file)
         if "numberOfWinners" in metadata:  # Market definition specific field
             return MarketDefinitionData(metadata)
         return MarketCatalogueData(metadata)

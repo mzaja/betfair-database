@@ -9,10 +9,12 @@ from typing import Callable, Literal
 from betfairdatabase.const import (
     INDEX_FILENAME,
     MARKET_DATA_FILE_PATH,
+    MARKET_METADATA_FILE_PATH,
     ROWID,
     SQL_TABLE_COLUMNS,
     SQL_TABLE_NAME,
     DuplicatePolicy,
+    SQLAction,
 )
 from betfairdatabase.exceptions import (
     DatabaseDirectoryError,
@@ -20,8 +22,10 @@ from betfairdatabase.exceptions import (
     IndexMissingError,
 )
 from betfairdatabase.imports import ImportPatterns
-from betfairdatabase.processor import MarketFileProcessor
+from betfairdatabase.market import Market
+from betfairdatabase.metrics import Counters
 from betfairdatabase.racing import RacingDataProcessor
+from betfairdatabase.tree import DirectoryParser
 from betfairdatabase.utils import ProgressBarMixin, is_debug_logging_enabled
 
 # ---------------------------------------------------------------------------
@@ -42,6 +46,7 @@ class BetfairDatabase(ProgressBarMixin):
     def __init__(self, database_dir: str | Path, progress_bar: bool = True):
         super().__init__(progress_bar)
         self.database_dir = Path(database_dir)
+        self._debug_logging_enabled = is_debug_logging_enabled(logger)
         if not self.database_dir.exists():
             # This is the most elegant place to raise this error
             # since most methods depend on it, although it makes
@@ -50,9 +55,8 @@ class BetfairDatabase(ProgressBarMixin):
         if not self.database_dir.is_dir():
             raise DatabaseDirectoryError(f"'{database_dir}' is not a directory.")
         self._index_file = self.database_dir / INDEX_FILENAME
-        self._racing_data_processor = RacingDataProcessor()
 
-    def index(self, force: bool = False) -> int:
+    def index(self, force: bool = False, merge_metadata: bool = False) -> int:
         """
         Turns the target directory into a database by indexing its contents.
 
@@ -71,13 +75,12 @@ class BetfairDatabase(ProgressBarMixin):
                     " Use force=True option to reindex the database.",
                 )
         # Construct index
-        processor = MarketFileProcessor(self.database_dir, self.progress_bar_enabled)
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
             conn.execute(
                 f"CREATE TABLE {SQL_TABLE_NAME}({','.join(SQL_TABLE_COLUMNS)}"
                 f", UNIQUE({','.join(SQL_TABLE_COLUMNS[-2:])}))"
             )
-            return processor.index_database(conn)
+            return self._main(self.database_dir, conn, merge_metadata)
 
     def insert(
         self,
@@ -106,14 +109,15 @@ class BetfairDatabase(ProgressBarMixin):
         """
         if not self._index_file.exists():
             self.index()  # Make a database if it does not exist
-        processor = MarketFileProcessor(self.database_dir, self.progress_bar_enabled)
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
-            return processor.update_database(
-                source_dir,
+            merge_metadata = False  # Temporarily disabled while WIP
+            return self._main(
+                Path(source_dir),
                 conn,
-                copy=copy,
-                import_pattern=pattern,
-                on_duplicates=DuplicatePolicy(on_duplicates),
+                merge_metadata,
+                copy,
+                pattern,
+                DuplicatePolicy(on_duplicates),
             )
 
     def select(
@@ -199,7 +203,6 @@ class BetfairDatabase(ProgressBarMixin):
             raise IndexMissingError(self.database_dir)
 
         rows_deleted = 0
-        debug_logging_enabled = is_debug_logging_enabled(logger)
 
         with contextlib.closing(sqlite3.connect(self._index_file)) as conn, conn:
             # Iterate over table rows, test if market data file exists, mark files which don't
@@ -220,7 +223,7 @@ class BetfairDatabase(ProgressBarMixin):
                         f" SET {MARKET_DATA_FILE_PATH} = NULL WHERE {ROWID} = {row_id}"
                     )
                     rows_deleted += 1
-                    if debug_logging_enabled:
+                    if self._debug_logging_enabled:
                         logger.debug("Removing '%s' from the database.", data_file_path)
             # Delete all marked rows
             conn.execute(
@@ -249,3 +252,80 @@ class BetfairDatabase(ProgressBarMixin):
         return connection.execute(f"SELECT COUNT(*) FROM {SQL_TABLE_NAME}").fetchone()[
             0
         ]
+
+    def _main(
+        self,
+        source_dir: Path,
+        connection: sqlite3.Connection,
+        merge_metadata: bool,
+        *args,
+    ) -> int:
+        """
+        Main routine of this class.
+        Called by the public methods `index` and `update`.
+        """
+        counters = Counters()
+
+        database_dirs = DirectoryParser(self.progress_bar_enabled).parse_directory_tree(
+            source_dir
+        )
+
+        importable_markets = []
+        for dd in self._progress_bar(database_dirs, "Parsing metadata", "directories"):
+            importable_markets += dd.process(counters, merge_metadata)
+
+        self._import_markets_into_database(
+            importable_markets, connection, counters, *args
+        )
+        action = "importing" if args else "indexing"
+        counters.log_info(action)
+        return counters.rows_inserted
+
+    def _import_markets_into_database(
+        self,
+        importable_markets: list[Market],
+        connection: sqlite3.Connection,
+        counters: Counters,
+        copy: bool = False,
+        import_pattern: Callable[[Market], str] | None = None,
+        on_duplicates: DuplicatePolicy | None = None,
+    ) -> None:
+        """
+        Imports the markets with valid metadata into the database.
+        Returns the number of inserted SQL table rows.
+        """
+        racing_data_processor = RacingDataProcessor(
+            importable_markets, self.progress_bar_enabled
+        )
+        update_existing_database = bool(import_pattern and on_duplicates)
+
+        for market in self._progress_bar(importable_markets, "Importing markets"):
+            if update_existing_database:
+                dest_dir = self.database_dir / import_pattern(market)
+                market = (
+                    market.copy(dest_dir, on_duplicates)
+                    if copy
+                    else market.move(dest_dir, on_duplicates)
+                )
+                if market.sql_action is SQLAction.SKIP:
+                    counters.markets_skipped += 1
+                    if self._debug_logging_enabled:
+                        logger.debug("Skipping '%s'.", market.market_data_file)
+                    continue
+                elif market.sql_action is SQLAction.UPDATE:
+                    connection.execute(
+                        f"DELETE FROM {SQL_TABLE_NAME}"
+                        f" WHERE {MARKET_METADATA_FILE_PATH} = '{market.market_metadata_file.resolve()}'"
+                    )
+                    counters.markets_updated += 1
+                    if self._debug_logging_enabled:
+                        logger.debug("Updating '%s'.", market.market_data_file)
+
+            sql_data_map = market.create_sql_mapping(racing_data_processor.get(market))
+            connection.execute(
+                f"INSERT INTO {SQL_TABLE_NAME} VALUES ({','.join('?'*len(sql_data_map))})",
+                tuple(sql_data_map.values()),
+            )
+            counters.rows_inserted += 1
+            if self._debug_logging_enabled and (market.sql_action is SQLAction.INSERT):
+                logger.debug("Adding '%s'.", market.market_data_file)

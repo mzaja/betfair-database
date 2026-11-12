@@ -9,11 +9,10 @@ from zoneinfo import ZoneInfo
 
 from tqdm import tqdm
 
-from betfairdatabase.const import ENCODING_UTF_8
-
 # ---------------------------------------------------------------------------
 # CONSTANTS
 # ---------------------------------------------------------------------------
+ENCODING_UTF_8 = "utf-8"
 JSON_SEPARATORS = (",", ":")  # Eliminate unnecessary whitespace
 REVERSE_READ_STEP = 64 * 1024  # Characters to start reading a file from reverse
 
@@ -21,12 +20,28 @@ REVERSE_READ_STEP = 64 * 1024  # Characters to start reading a file from reverse
 # ---------------------------------------------------------------------------
 # FUNCTIONS
 # ---------------------------------------------------------------------------
+def read_json(file: Path) -> Any:
+    """Reads a JSON file and returns the contents."""
+    return json.loads(file.read_text(encoding=ENCODING_UTF_8))
+
+
 def write_to_json(file: Path, contents: Any) -> int:
     """Writes the contents to a JSON file."""
     file.write_text(
         json.dumps(contents, separators=JSON_SEPARATORS),
         encoding=ENCODING_UTF_8,
     )
+
+
+def create_backup(file: Path, extension: str = ".bak") -> Path:
+    """
+    Creates a backup of a file by appending the chosen extension to it.
+    The file is moved, not copied.
+    The destination file is overwritten if it already exists.
+    Returns the path to the backup file.
+    """
+    backup_file_name = file.with_suffix(file.suffix + extension)
+    return file.replace(backup_file_name)
 
 
 def parse_datetime(datetime_str: str) -> dt.datetime:
@@ -113,6 +128,7 @@ class ProgressBarMixin:
         name: str,
         unit: str = "markets",
         total: int | None = None,
+        **kwargs,
     ) -> Iterable[T]:
         """Applies the progress bar to the iterable."""
         if not self.progress_bar_enabled:
@@ -120,4 +136,4 @@ class ProgressBarMixin:
         else:
             if not unit.startswith(" "):
                 unit = " " + unit
-            return tqdm(iterable, desc=name, unit=unit, total=total)
+            return tqdm(iterable, desc=name, unit=unit, total=total, **kwargs)

@@ -16,7 +16,9 @@ def progress_bar(enabled: bool) -> None:
     _progress_bar_enabled = enabled
 
 
-def index(database_dir: str | Path, force: bool = False) -> int:
+def index(
+    database_dir: str | Path, force: bool = False, merge_metadata: bool = False
+) -> int:
     """
     Turns the target directory into a database by indexing its contents.
 
@@ -24,7 +26,9 @@ def index(database_dir: str | Path, force: bool = False) -> int:
     Throws IndexExistsError if an index already exists. Use force=True to
     overwrite the existing index.
     """
-    return BetfairDatabase(database_dir, _progress_bar_enabled).index(force)
+    return BetfairDatabase(database_dir, _progress_bar_enabled).index(
+        force, merge_metadata
+    )
 
 
 def select(

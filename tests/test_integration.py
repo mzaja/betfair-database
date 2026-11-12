@@ -24,7 +24,7 @@ class TestIntegrationBase(unittest.TestCase):
     """
 
     TEST_DATA_DIR_SRC = Path("./tests/data/datasets")
-    DATABASE_SIZE = 14
+    DATABASE_SIZE = 18
 
     @classmethod
     def setup_test_fixtures(cls):
@@ -34,7 +34,9 @@ class TestIntegrationBase(unittest.TestCase):
         3. Lists the copied files into categories.
         """
         cls.test_fixture = TestFixture(
-            Datasets(compressed=True, uncompressed=True, official=True)
+            Datasets(
+                compressed=True, uncompressed=True, official=True, bulk_metadata=True
+            )
         )
         cls.test_data_dir = cls.test_fixture.path
         cls.all_source_files = {p.resolve() for p in cls.test_data_dir.rglob("1.*")}
@@ -115,7 +117,7 @@ class TestIntegrationPart1(TestIntegrationBase):
         # There are 10 market catalogues, but one is missing its market data and will be ignored.
         # There is 1 market definition file and 4 market data files without metadata, which will
         # all be imported.
-        self.assertEqual(len(self.metadata_source_files), 11)
+        self.assertEqual(len(self.metadata_source_files), 12)
         self.assertEqual(len(markets), self.DATABASE_SIZE)
 
         # Market without data is not imported
@@ -130,7 +132,7 @@ class TestIntegrationPart1(TestIntegrationBase):
 
         # One metadata.json file was created for all official markets
         bulk_metadata_files = list(self.test_data_dir.rglob(METADATA_FILE_NAME))
-        self.assertEqual(len(bulk_metadata_files), 1)
+        self.assertEqual(len(bulk_metadata_files), 2)
 
         # All importable markets have been imported
         imported_individual_metadata_files = [
@@ -139,9 +141,11 @@ class TestIntegrationPart1(TestIntegrationBase):
             if p.name != f"{market_id_no_data}.json"
         ]
         valid_files_without_metadata_files = 4  # 4 official .bz2 files
+        files_covered_by_bulk_metadata_file = 3
         self.assertEqual(
             len(imported_individual_metadata_files)
-            + valid_files_without_metadata_files,
+            + valid_files_without_metadata_files
+            + files_covered_by_bulk_metadata_file,
             self.DATABASE_SIZE,
         )
 
@@ -170,12 +174,12 @@ class TestIntegrationPart1(TestIntegrationBase):
 
         # Check counts of values
         self.check_value_counts(
-            markets, "eventTypeId", {"1": 3, "2": 1, "3": 1, "4": 2, "7": 3, "4339": 4}
+            markets, "eventTypeId", {"1": 3, "2": 1, "3": 1, "4": 2, "7": 3, "4339": 8}
         )
         self.check_value_counts(
             markets,
             "competitionId",
-            {"11365612": 1, "12247754": 2, "12596293": 1, None: 10},
+            {"11365612": 1, "12247754": 2, "12596293": 1, None: 14},
         )
         self.check_value_counts(
             markets,
@@ -184,19 +188,20 @@ class TestIntegrationPart1(TestIntegrationBase):
                 "ASIAN_HANDICAP_SINGLE_LINE": 1,
                 "ASIAN_HANDICAP_DOUBLE_LINE": 1,
                 "LINE": 1,
-                "ODDS": 11,
+                "ODDS": 15,
             },
         )
         self.check_value_counts(
             markets,
             "priceLadderDescriptionType",
-            {"FINEST": 2, "LINE_RANGE": 1, "CLASSIC": 6, None: 5},
+            {"FINEST": 2, "LINE_RANGE": 1, "CLASSIC": 10, None: 5},
         )
         self.check_value_counts(
             markets,
             "marketType",
             {
-                "WIN": 4,
+                "WIN": 6,
+                "PLACE": 3,
                 "MATCH_ODDS": 2,
                 "BOTH_TEAMS_TO_SCORE": 1,
                 "TOP_5_FINISH": 1,
@@ -204,7 +209,6 @@ class TestIntegrationPart1(TestIntegrationBase):
                 "1_INNING_6_OVR_LINE": 1,
                 "TEAMB_1ST_INN_RUNS": 1,
                 "EACH_WAY": 1,
-                "PLACE": 1,
                 "TRAP_CHALLENGE": 1,
             },
         )
@@ -217,29 +221,30 @@ class TestIntegrationPart1(TestIntegrationBase):
                 "DAX": 1,
                 "Richmond": 1,
                 "Pakenham": 1,
+                "Swindon": 4,
                 None: 8,
             },
         )
-        self.check_value_counts(markets, "raceType", {"Flat": 1, "Hurdle": 1, None: 12})
-        self.check_value_counts(markets, "bspMarket", {1: 5, 0: 9})
-        self.check_value_counts(markets, "turnInPlayEnabled", {1: 10, 0: 4})
-        self.check_value_counts(markets, "persistenceEnabled", {1: 10, 0: 4})
+        self.check_value_counts(markets, "raceType", {"Flat": 1, "Hurdle": 1, None: 16})
+        self.check_value_counts(markets, "bspMarket", {1: 9, 0: 9})
+        self.check_value_counts(markets, "turnInPlayEnabled", {1: 10, 0: 8})
+        self.check_value_counts(markets, "persistenceEnabled", {1: 10, 0: 8})
         self.check_value_counts(
-            markets, "lineRangeInfoMarketUnit", {"Goals": 1, "Runs": 1, None: 12}
+            markets, "lineRangeInfoMarketUnit", {"Goals": 1, "Runs": 1, None: 16}
         )
-        self.check_value_counts(markets, "eachWayDivisor", {5.0: 1, None: 13})
+        self.check_value_counts(markets, "eachWayDivisor", {5.0: 1, None: 17})
         self.check_value_counts(
-            markets, "eventCountryCode", {"GB": 7, "AU": 2, "FR": 1, "BG": 1, None: 3}
+            markets, "eventCountryCode", {"GB": 11, "AU": 2, "FR": 1, "BG": 1, None: 3}
         )
         # Market definition-exclusive field
-        self.check_value_counts(markets, "numberOfWinners", {1: 4, 5: 1, None: 9})
+        self.check_value_counts(markets, "numberOfWinners", {1: 4, 5: 1, None: 13})
 
         # Value counts for additional metadata
         self.check_value_counts(
             markets,
             "localDayOfWeek",
             {
-                "Friday": 4,
+                "Friday": 8,
                 "Thursday": 3,
                 "Sunday": 2,
                 "Tuesday": 2,
@@ -251,13 +256,13 @@ class TestIntegrationPart1(TestIntegrationBase):
         self.check_value_counts(
             markets,
             "raceTypeFromName",
-            {"OR": 2, "Mdn Claim": 1, "Mdn": 1, "3yo": 1, None: 9},
+            {"OR": 2, "A6": 2, "A5": 2, "Mdn Claim": 1, "Mdn": 1, "3yo": 1, None: 9},
         )
         # Some values here are floats, meaning their approximate value cannot be used
         # to retrieve their count from the Counter's dict. Therefore, we only test for
         # round values and None.
         meters_counter = Counter(m["raceDistanceMeters"] for m in markets)
-        for distance, count in [(280, 2), (320, 1), (1200, 1), (None, 9)]:
+        for distance, count in [(280, 2), (320, 1), (476, 4), (1200, 1), (None, 9)]:
             self.assertEqual(meters_counter[distance], count)
 
         furlongs_counter = Counter(m["raceDistanceFurlongs"] for m in markets)
@@ -304,13 +309,13 @@ class TestIntegrationPart1(TestIntegrationBase):
                     self.test_data_dir,
                     where=query,
                 )
-                self.assertEqual(len(markets), 8)
+                self.assertEqual(len(markets), 12)
                 for market in markets:
                     self.assertIn(market["eventCountryCode"], ("GB", "FR"))
 
         # BETWEEN operator
         markets = bfdb.select(self.test_data_dir, where="runners BETWEEN 6 AND 8")
-        self.assertEqual(len(markets), 6)
+        self.assertEqual(len(markets), 10)
         for market in markets:
             self.assertTrue(6 <= market["runners"] <= 8)
 
@@ -327,7 +332,7 @@ class TestIntegrationPart1(TestIntegrationBase):
             self.assertIsNone(market["eventCountryCode"])
 
         markets = bfdb.select(self.test_data_dir, where="eventCountryCode IS NOT NULL")
-        self.assertEqual(len(markets), 11)
+        self.assertEqual(len(markets), 15)
         for market in markets:
             self.assertIsNotNone(market["eventCountryCode"])
 
@@ -389,7 +394,7 @@ class TestIntegrationPart1(TestIntegrationBase):
         """Tests the combination of queries for selecting data."""
         bfdb.index(self.test_data_dir)
 
-        for limit, market_count in ((None, 4), (2, 2)):
+        for limit, market_count in ((None, 8), (2, 2)):
             with self.subTest(limit=limit):
                 columns = ["marketDataFilePath", "raceType", "runners"]
                 markets = bfdb.select(
@@ -406,7 +411,7 @@ class TestIntegrationPart1(TestIntegrationBase):
             columns=["eventTypeId", "bspMarket"],
             where="eventTypeId IN ('7', '4339') AND bspMarket=true",
         )
-        self.assertEqual(len(markets), 5)
+        self.assertEqual(len(markets), 9)
         for market in markets:
             self.assertIn(market["eventTypeId"], ("7", "4339"))
             self.assertTrue(market["bspMarket"])

@@ -95,10 +95,12 @@ class TestUtils(unittest.TestCase):
         """
         import sys
 
-        # The test is currently flaky on Python 3.14 for Windows.
+        # The test is currently flaky on Python 3.14 & 3.15 for Windows.
         # Because the test compares relative performance, this could be both
         # caused by an improvement or a regression in the interpreter.
-        flaky = (sys.platform == "win32") and (sys.version_info[:2] == (3, 14))
+        flaky = (sys.platform == "win32") and (
+            (3, 14) <= sys.version_info[:2] <= (3, 15)
+        )
 
         # Use a named file to ensure it is actually located on the file system, and is not
         # a vritual file store in RAM
